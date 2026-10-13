@@ -110,14 +110,12 @@ rejects "rejects empty measure log in pass 3" 3 IF_MEASURE_LOG=
 if [[ -n "$DUMP" ]]; then
   python3 "$TESTS/gen_stream.py" 50000 1 > stream
   for d in 512 64; do
-    for t in 0 1; do
-      rm -f ideal_fusion_candidates.csv ideal_fusion_measure.csv
-      IF_DISTANCE=$d IF_TYPE=$t ./harness 1 < stream > /dev/null
-      cp ideal_fusion_candidates.csv "$DUMP/pass1-d$d-t$t.csv"
-      IF_DISTANCE=$d ./harness 2 < stream > "$DUMP/pass2-d$d-t$t.txt"
-      IF_DISTANCE=$d ./harness 3 < stream > /dev/null
-      cp ideal_fusion_measure.csv "$DUMP/pass3-d$d-t$t.csv"
-    done
+    rm -f ideal_fusion_candidates.csv ideal_fusion_measure.csv
+    IF_DISTANCE=$d ./harness 1 < stream > /dev/null
+    cp ideal_fusion_candidates.csv "$DUMP/pass1-d$d.csv"
+    IF_DISTANCE=$d ./harness 2 < stream > "$DUMP/pass2-d$d.txt"
+    IF_DISTANCE=$d ./harness 3 < stream > /dev/null
+    cp ideal_fusion_measure.csv "$DUMP/pass3-d$d.csv"
   done
   echo "wrote $DUMP"
 fi

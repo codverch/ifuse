@@ -33,7 +33,6 @@
 uns IDEAL_FUSION_PASS = 1;
 uns IDEAL_FUSION_DISTANCE = 512;
 char* IDEAL_FUSION_LOG = "ideal_fusion_candidates.csv";
-int IDEAL_FUSION_TYPE = 0;
 char* IDEAL_FUSION_MEASURE_LOG = "ideal_fusion_measure.csv";
 uns DCACHE_LINE_SIZE = 64;
 Counter cycle_count = 0;
@@ -63,8 +62,6 @@ static void env_override(void) {
 
   if ((v = getenv("IF_DISTANCE")))
     IDEAL_FUSION_DISTANCE = strtoul(v, NULL, 0);
-  if ((v = getenv("IF_TYPE")))
-    IDEAL_FUSION_TYPE = strtol(v, NULL, 0);
   if ((v = getenv("IF_LOG")))
     IDEAL_FUSION_LOG = (char*)v;
   if ((v = getenv("IF_MEASURE_LOG")))

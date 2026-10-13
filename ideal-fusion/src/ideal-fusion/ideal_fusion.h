@@ -21,12 +21,6 @@ typedef enum Ideal_Fusion_Pass_enum {
   IDEAL_FUSION_PASS_MEASURE = 3,
 } Ideal_Fusion_Pass;
 
-typedef enum Ideal_Fusion_Policy_enum {
-  IDEAL_FUSION_OLDEST_FIRST,
-  IDEAL_FUSION_MOST_RECENT,
-  NUM_IDEAL_FUSION_POLICIES
-} Ideal_Fusion_Policy;
-
 /* Called for every fetched op (ft.cc). Numbers on-path ops; runs pass 1
  * matching or pass 2 tagging. */
 void ideal_fusion_on_fetch_op(Op* op);

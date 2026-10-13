@@ -499,19 +499,11 @@ static Ideal_Fusion_Load_Candidate* find_matching_load1(Op* load2) {
     if (!load1_matches_load2(load1, load2, cache_block_addr))
       continue;
 
-    if (!best_match) {
+    /* At most one candidate qualifies (README, Limitations). Taking the
+     * oldest keeps the choice deterministic regardless. */
+    if (!best_match || load1->micro_op_num < best_match->micro_op_num)
       best_match = load1;
-      continue;
-    }
-
-    if (IDEAL_FUSION_TYPE == IDEAL_FUSION_MOST_RECENT) {
-      if (load1->micro_op_num > best_match->micro_op_num)
-        best_match = load1;
-    } else if (load1->micro_op_num < best_match->micro_op_num) {
-      best_match = load1;
-    }
   }
-
 
   return best_match;
 }
