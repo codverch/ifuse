@@ -1,3 +1,9 @@
+# I-Fuse
+
+This repository builds on Scarab. Each experiment lives in its own directory:
+
+- [rfp/](rfp/README.md): Register File Prefetching (ISCA 2022) baseline.
+
 # Scarab Quick Start Guide
 Install:
 1. Install exact PIN version ([PIN 3.15](https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-binary-instrumentation-tool-downloads.html))

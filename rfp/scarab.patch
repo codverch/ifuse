@@ -1,0 +1,1352 @@
+diff --git a/bin/power/power_intf.pl b/bin/power/power_intf.pl
+index fd54f14..f0443eb 100755
+--- a/bin/power/power_intf.pl
++++ b/bin/power/power_intf.pl
+@@ -86,7 +86,7 @@ my %values;
+ 
+ print("Parsing McPAT output ($dir/$file_tag"."mcpat.out) and CACTI output ($dir/$file_tag"."cacti_dram.out)...\n");
+ parse_mcpat_output("$dir/$file_tag"."mcpat.out", \%values, $get_voltage_and_freq);
+-$values{"MEMORY"} = parse_cacti_dram_output("$dir/$file_tag"."cacti_dram.out", $get_voltage_and_freq);
++$values{"MEMORY"} = parse_cacti_dram_output("$dir/$file_tag"."cacti_dram.out", $get_voltage_and_freq, \%params, \%stats);
+ 
+ open my $out, '>', $model_results_filename ||
+     die "Could not open $model_results_filename\n";
+@@ -197,10 +197,12 @@ sub parse_mcpat_output($$$)
+     return \%values;
+ }
+ 
+-sub parse_cacti_dram_output($$)
++sub parse_cacti_dram_output($$;$$)
+ {
+     my $filename = shift;
+     my $get_voltage_and_freq = shift;
++    my $params = shift;
++    my $stats = shift;
+     open my $file, "<", $filename || die "Could not open $filename\n";
+ 
+     my %values;
+@@ -240,17 +242,17 @@ sub parse_cacti_dram_output($$)
+ 
+     $values{"VOLTAGE"}     = $cacti_values{"Voltage (V)"}          if ($get_voltage_and_freq); 
+     $values{"MIN_VOLTAGE"} = $values{"VOLTAGE"}                    if ($get_voltage_and_freq); # for now
+-    $values{"FREQUENCY"}   = $params{"POWER_INTF_REF_MEMORY_FREQ"} if ($get_voltage_and_freq);
++    $values{"FREQUENCY"}   = $params->{"POWER_INTF_REF_MEMORY_FREQ"} if ($get_voltage_and_freq);
+ 
+     my $power_dram_precharge_stat = 0;
+     my $power_dram_activate_stat  = 0;
+     my $power_dram_read_stat      = 0;
+     my $power_dram_write_stat     = 0;
+-    for my $core_id (0..$params{"NUM_CORES"}-1) {
+-      $power_dram_precharge_stat += $stats{"POWER_DRAM_PRECHARGE"}[$core_id];
+-      $power_dram_activate_stat  += $stats{"POWER_DRAM_ACTIVATE"}[$core_id];
+-      $power_dram_read_stat      += $stats{"POWER_DRAM_READ"}[$core_id];
+-      $power_dram_write_stat     += $stats{"POWER_DRAM_WRITE"}[$core_id];
++    for my $core_id (0..$params->{"NUM_CORES"}-1) {
++      $power_dram_precharge_stat += $stats->{"POWER_DRAM_PRECHARGE"}[$core_id];
++      $power_dram_activate_stat  += $stats->{"POWER_DRAM_ACTIVATE"}[$core_id];
++      $power_dram_read_stat      += $stats->{"POWER_DRAM_READ"}[$core_id];
++      $power_dram_write_stat     += $stats->{"POWER_DRAM_WRITE"}[$core_id];
+     }
+ 
+     $values{"DYNAMIC"} =
+@@ -276,11 +278,11 @@ sub parse_cacti_dram_output($$)
+ 
+     $values{"DYNAMIC"} *= 1.0e-9; # convert from nJoules to Joules
+ 
+-    my $time = $stats{"POWER_CYCLE"}[0]/$params{"POWER_INTF_REF_CHIP_FREQ"};
++    my $time = $stats->{"POWER_CYCLE"}[0]/$params->{"POWER_INTF_REF_CHIP_FREQ"};
+     if($debug) {
+       print("[parse_cacti_dram_output] time:\n");
+-      my $num_cycles = $stats{"POWER_CYCLE"}[0];
+-      my $core_freq  = $params{"POWER_INTF_REF_CHIP_FREQ"};
++      my $num_cycles = $stats->{"POWER_CYCLE"}[0];
++      my $core_freq  = $params->{"POWER_INTF_REF_CHIP_FREQ"};
+ 
+       print("$time sec = $num_cycles (cycles) / $core_freq (freq Hz)\n");
+     }
+@@ -330,8 +332,9 @@ sub get_params($@) {
+     }
+ 
+     my $cmd = "";
+-    for my $file (`ls $dir/${file_tag}PARAMS.*{out,out.gz} 2> /dev/null`) {
+-        chomp $file;
++    my @param_files = (glob("$dir/${file_tag}PARAMS.*out"), glob("$dir/${file_tag}PARAMS.*out.gz"));
++    for my $file (@param_files) {
++        next unless -f $file;
+         $cmd .= ($file =~ /gz$/ ? "zcat" : "cat")." $file ; ";
+     }
+ 
+@@ -383,12 +386,13 @@ sub traverse_stats($$$$$) {
+     my $func = shift;
+     my $power_intf = shift;
+ 
+-    my @files = $power_intf ?
+-        `ls $dir/${file_tag}*.stat.*{out,out.gz} 2> /dev/null` :
+-        `ls $dir/${file_tag}*.stat.*{out,out.gz} 2> /dev/null | grep -v scarab_power`;
++    my @files = (glob("$dir/${file_tag}*.stat.*out"), glob("$dir/${file_tag}*.stat.*out.gz"));
++    if (!$power_intf) {
++        @files = grep { $_ !~ /scarab_power/ } @files;
++    }
+ 
+     for my $file (@files) {
+-        chomp $file;
++        next unless -f $file;
+         next if $file =~ /ramulator/;
+         die "Cannot parse core id from $file\n" unless $file =~ /stat\.(\d+)\.out/;
+         my $file_core_id = $1;
+diff --git a/src/core.stat.def b/src/core.stat.def
+index 2cbb657..a99a5d2 100644
+--- a/src/core.stat.def
++++ b/src/core.stat.def
+@@ -107,6 +107,11 @@ DEF_STAT(  LD_EXEC_CYCLES_2,   COUNT, NO_RATIO  )
+ DEF_STAT(  LD_EXEC_CYCLES_3,   COUNT, NO_RATIO  )
+ DEF_STAT(  LD_EXEC_CYCLES_4,   DIST , NO_RATIO  )
+ 
++/* On-path load latency summed at retire (works with RFP on or off). */
++DEF_STAT(  LD_EXEC_MINUS_FETCH_LATENCY,   COUNT, NO_RATIO  )  /* Sum of (exec_cycle - fetch_cycle) over retired loads */
++DEF_STAT(  LD_RETIRE_MINUS_FETCH_LATENCY, COUNT, NO_RATIO  )  /* Sum of (retire_cycle - fetch_cycle) over retired loads */
++DEF_STAT(  LD_EXEC_TO_DONE_LATENCY,       COUNT, NO_RATIO  )  /* Sum of (done_cycle - exec_cycle): time waiting for data */
++
+ DEF_STAT(  ICACHE_STAGE_STARVED, DIST, NO_RATIO   )
+ DEF_STAT(  ICACHE_STAGE_NOT_STARVED,  DIST, NO_RATIO   )
+ 
+@@ -199,6 +204,12 @@ DEF_STAT(MAP_STAGE_RENAME_VEC_REG_OFFPATH, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_RENAME_MOVE_ELIM_ONPATH, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_RENAME_MOVE_ELIM_OFFPATH, COUNT, NO_RATIO)
+ 
++DEF_STAT(REG_FILE_UTIL_SAMPLES, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_INT_PHYS_REGS_SUM, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_VEC_PHYS_REGS_SUM, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_INT_OCCUPIED_SUM, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_VEC_OCCUPIED_SUM, COUNT, NO_RATIO)
++
+ DEF_STAT(MAP_STAGE_ONPATH_INT_REG_NUM_ALLOC, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_ONPATH_VEC_REG_NUM_ALLOC, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_ONPATH_INT_REG_NUM_SHORTLIVE, COUNT, NO_RATIO)
+diff --git a/src/dcache_stage.c b/src/dcache_stage.c
+index b781631..7bdd27e 100644
+--- a/src/dcache_stage.c
++++ b/src/dcache_stage.c
+@@ -41,9 +41,13 @@
+ #include "debug/debug_print.h"
+ 
+ #include "core.param.h"
++#include "memory/memory.h"
+ #include "memory/memory.param.h"
+ #include "prefetcher//stream.param.h"
+ #include "prefetcher/pref.param.h"
++#include "prefetcher/rfp.param.h"
++#include "prefetcher/rfp.h"
++#include "prefetcher/rfp_prf.h"
+ 
+ #include "bp/bp.h"
+ #include "prefetcher/l2l1pref.h"
+@@ -51,6 +55,7 @@
+ #include "prefetcher/stream_pref.h"
+ 
+ #include "cmp_model.h"
++#include "lsq.h"
+ #include "map.h"
+ #include "model.h"
+ #include "statistics.h"
+@@ -81,6 +86,7 @@ static inline void dcache_fill_wp_collect_stats(Dcache_Data* line, Mem_Req* req)
+ static inline void dcache_hit_wp_collect_stats(Dcache_Data* line, Op* op);
+ static inline Flag dcache_miss_new_mem_req(Op* op, Addr line_addr, Mem_Req_Type mem_req_type);
+ static inline void dcache_miss_extra_access(Op* op, Cache* cache, Addr line_addr, uns8 proc_id, uns8 cache_cycle);
++static inline Flag dcache_process_lsq_rfp_queue(void);
+ 
+ static inline Dcache_Data* dcache_fill_get_cacheline(Mem_Req* req);
+ static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data);
+@@ -238,8 +244,34 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     uns bank = BANK(op->oracle_info.va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR);
+     DEBUG(dc->proc_id, "check_read and write port availiabilty mem_type:%s bank:%d \n",
+           (op->inst_info->table_info.mem_type == MEM_ST) ? "ST" : "LD", bank);
+-    if (!PERFECT_DCACHE && ((op->inst_info->table_info.mem_type == MEM_ST && !get_write_port(&dc->ports[bank])) ||
+-                            (op->inst_info->table_info.mem_type != MEM_ST && !get_read_port(&dc->ports[bank])))) {
++
++    /* RFP check at load dispatch. Resolve whether the load can be served from the PRF before the
++       port gate, so a served load takes no L1 port. A served load completes when the prefetched data
++       is available, which gives full or partial latency savings (see below). */
++    Flag rfp_try_serve = RFP_ON && op->rfp_predicted && !op->off_path &&
++                         op->inst_info->table_info.mem_type == MEM_LD && op->rfp_launch_cycle;
++    Flag rfp_valid = FALSE;
++    Flag rfp_exact_match = FALSE;
++    Counter rfp_ready_cycle = 0;
++
++    if (rfp_try_serve) {
++      /* RFP prefetches the load's value, so the predicted address must match exactly. A same-line,
++         wrong-offset prediction would have read the wrong bytes and counts as a misprediction. Older
++         stores are handled at L1 service by rfp_blocked_by_older_stores. */
++      rfp_exact_match = (op->rfp_predicted_addr == op->oracle_info.va);
++      rfp_valid = rfp_prf_ready(op->proc_id, op->rfp_prfid, op->oracle_info.va, op->rfp_launch_cycle,
++                                op->unique_num, &rfp_ready_cycle);
++    }
++    /* The prefetch has won L1 arbitration and will deliver the value (rfp_valid = the paper's
++       RFP-inflight bit is set), and the prediction is exactly correct -> serve from the PRF with NO L1
++       access. The load completes when the prefetched data is actually available (rfp_ready_cycle). */
++    Flag rfp_serve = rfp_try_serve && rfp_valid && rfp_exact_match &&
++                     !op->rfp_dropped_load_first && !op->rfp_mispred_accounted;
++
++    /* A PRF-served load never touches the L1 data array, so it reserves no read/write port. */
++    if (!PERFECT_DCACHE && !rfp_serve &&
++        ((op->inst_info->table_info.mem_type == MEM_ST && !get_write_port(&dc->ports[bank])) ||
++         (op->inst_info->table_info.mem_type != MEM_ST && !get_read_port(&dc->ports[bank])))) {
+       op->state = OS_WAIT_DCACHE;
+       STAT_EVENT(dc->proc_id, DCACHE_READ_PORT_UNAVAILABLE_ONPATH + op->off_path);
+       continue;
+@@ -251,12 +283,119 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     if (IDEAL_L2_L1_PREFETCHER)
+       ideal_l2l1_prefetcher(op);
+ 
++    /* The load is predicted but not served from the PRF. Either the address was wrong or the
++       prefetch has not read the L1 yet. Both fall through to a normal demand access. */
++    if (rfp_try_serve && !op->rfp_dropped_load_first && !op->rfp_mispred_accounted && !rfp_serve) {
++      if (!rfp_exact_match) {
++        /* Misprediction (exact-address mismatch): the prefetched value is wrong. Clear it, cancel the
++           in-flight request, count the wrong prediction (the extra-L1-bandwidth case the paper charges),
++           and re-fetch via the normal demand path below. */
++        rfp_prf_clear(op->proc_id, op->rfp_prfid);
++        mem_cancel_rfp_prefetch(op->proc_id, op->rfp_prfid, op->rfp_launch_cycle, op->unique_num);
++        if (!op->rfp_pred_resolved) {
++          Addr pred_line = op->rfp_predicted_addr & ~(Addr)(DCACHE_LINE_SIZE - 1);
++          Addr actual_line = op->oracle_info.va & ~(Addr)(DCACHE_LINE_SIZE - 1);
++          STAT_EVENT(op->proc_id, RFP_PRED_RESOLVED);
++          if (pred_line == actual_line)
++            STAT_EVENT(op->proc_id, RFP_PRED_WRONG_LINE);
++          else
++            STAT_EVENT(op->proc_id, RFP_PRED_WRONG_ADDR);
++          op->rfp_pred_resolved = TRUE;
++        }
++        STAT_EVENT(op->proc_id, RFP_PREDICTION_WRONG);
++        STAT_EVENT(op->proc_id, RFP_PRF_CLEARED_DUE_TO_MISPRED);
++        rfp_reset_confidence_on_mispredict(op->proc_id, op->inst_info->addr);
++        op->rfp_mispred_accounted = TRUE;
++      } else {
++        /* The prefetch had NOT won L1 arbitration by the time the load dispatched (the RFP-inflight bit
++           is not set): the paper drops it and the load runs as a normal demand load ("if the load
++           becomes ready, the prefetch will get dropped and the load will continue", §3.3 p6). Cancel to
++           free the buffer / suppress a late writeback. */
++        op->rfp_dropped_load_first = TRUE;
++        rfp_prf_mark_dropped(op->proc_id, op->rfp_prfid, op->unique_num);
++        mem_cancel_rfp_prefetch(op->proc_id, op->rfp_prfid, op->rfp_launch_cycle, op->unique_num);
++        if (!op->rfp_pred_resolved) {
++          /* Address was correct; prefetch just lost the race. */
++          STAT_EVENT(op->proc_id, RFP_PRED_RESOLVED);
++          STAT_EVENT(op->proc_id, RFP_PRED_CORRECT);
++          op->rfp_pred_resolved = TRUE;
++        }
++        STAT_EVENT(op->proc_id, RFP_DROPPED_SINCE_LOAD_BEAT_PREFETCH);
++      }
++    }
++
++    /* Serve from the PRF — NO L1 access. The load's dependents are woken exactly when the prefetched
++     * data becomes available (rfp_ready_cycle). In Scarab's timing model a dependent's rdy_cycle == the
++     * producer's wake_cycle (no separate speculative-wakeup pipeline), so setting done_cycle to the
++     * data-available cycle reproduces the paper's Fig 9 timing directly:
++     *   - FULL mitigation: the data is already in the PRF (rfp_ready_cycle <= now), so done_cycle = now+1
++     *     and the entire L1-access latency is hidden.
++     *   - PARTIAL mitigation: the prefetch won arbitration only a few cycles ago and the data is still in
++     *     flight (rfp_ready_cycle > now), so the load completes at rfp_ready_cycle — a fraction of the L1
++     *     latency is saved, exactly the paper's "RFP-inflight gets triggered sometime after load wake-up".
++     * The load never blocks/polls and issues no memory request, so this is deadlock-free. */
++    if (rfp_serve) {
++      Counter normal_done = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency;
++      Counter serve_done = MAX2(cycle_count + 1, rfp_ready_cycle);
++      uns saved_cycles = (normal_done > serve_done) ? (uns)(normal_done - serve_done) : 0;
++      op->dcache_cycle = cycle_count;
++      op->oracle_info.dcmiss = FALSE;
++      op->rfp_served = TRUE;
++      op->rfp_partial_mitigated = (rfp_ready_cycle > cycle_count);
++      if (!op->rfp_pred_resolved) {
++        STAT_EVENT(op->proc_id, RFP_PRED_RESOLVED);
++        STAT_EVENT(op->proc_id, RFP_PRED_CORRECT);
++        op->rfp_pred_resolved = TRUE;
++      }
++      STAT_EVENT(op->proc_id, RFP_PRF_SERVED);
++      STAT_EVENT(op->proc_id, RFP_PREFETCH_USEFUL);
++      STAT_EVENT(op->proc_id, RFP_USED_NO_DEMAND);
++      STAT_EVENT(op->proc_id, RFP_NUM_PREFETCHED_LOADS);
++      STAT_EVENT(op->proc_id, RFP_COVERAGE);
++      if (op->rfp_partial_mitigated) {
++        STAT_EVENT(op->proc_id, RFP_PARTIAL_MITIGATED);
++      } else {
++        STAT_EVENT(op->proc_id, RFP_FULL_MITIGATED);
++        STAT_EVENT(op->proc_id, RFP_ON_TIME);
++      }
++
++      /* avg cycles saved per useful RFP × #useful RFPs ≈ total cycles saved */
++      INC_STAT_EVENT(op->proc_id, RFP_SAVED_CYCLES, saved_cycles);
++      INC_STAT_EVENT(op->proc_id, RFP_TOTAL_CYCLES_SAVED, saved_cycles);
++      INC_STAT_EVENT(op->proc_id, RFP_AVG_LAT_REDUCTION_PER_PREF, saved_cycles);
++      if (op->rfp_partial_mitigated) {
++        INC_STAT_EVENT(op->proc_id, RFP_SAVED_CYCLES_PARTIAL, saved_cycles);
++        INC_STAT_EVENT(op->proc_id, RFP_AVG_LAT_REDUCTION_PARTIAL, saved_cycles);
++      } else {
++        INC_STAT_EVENT(op->proc_id, RFP_SAVED_CYCLES_FULL, saved_cycles);
++        INC_STAT_EVENT(op->proc_id, RFP_AVG_LAT_REDUCTION_FULL, saved_cycles);
++      }
++      /* Remaining wait after dispatch on the served path (0 for full mitigation). */
++      if (serve_done > cycle_count)
++        INC_STAT_EVENT(op->proc_id, RFP_REMAINING_LAT_SERVED, serve_done - cycle_count);
++
++      op->done_cycle = serve_done;        /* full: now+1; partial: data-available cycle */
++      op->wake_cycle = op->done_cycle;
++      wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
++      continue;
++    }
++
+     /* now access the dcache with it */
+     Addr line_addr;
+-    Dcache_Data* line = (Dcache_Data*)cache_access(&dc->dcache, op->oracle_info.va, &line_addr, TRUE);
++    Dcache_Data* line = NULL;
++
++    line_addr = op->oracle_info.va;
++    line = (Dcache_Data*)cache_access(&dc->dcache, line_addr, &line_addr, TRUE);
++
+     op->dcache_cycle = cycle_count;
+     dc->idle_cycle = MAX2(dc->idle_cycle, cycle_count + DCACHE_CYCLES);
+ 
++    /* Count every demand access issued to the L1-D (hit or miss); gate on path. */
++    if (!op->off_path)
++      STAT_EVENT(op->proc_id, DCACHE_ACCESS_ONPATH);
++    else
++      STAT_EVENT(op->proc_id, DCACHE_ACCESS_OFFPATH);
++
+     if (op->inst_info->table_info.mem_type == MEM_ST)
+       STAT_EVENT(op->proc_id, POWER_DCACHE_WRITE_ACCESS);
+     else
+@@ -291,6 +430,10 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     dcache_cacheline_miss(op, line_addr);
+   }
+ 
++  /* RFP gets strictly the lowest priority for L1 access, hence it is serviced last. */
++  if (RFP_ON)
++    dcache_process_lsq_rfp_queue();
++
+   /* prefetcher update */
+   if (STREAM_PREFETCH_ON)
+     update_pref_queue();
+@@ -354,10 +497,14 @@ Flag dcache_fill_line(Mem_Req* req) {
+     cycle_count = old_cycle_count;
+     return FAILURE;
+   }
+-
++  
+   /* update cacheline fields and wake up dependent ops */
+   dcache_fill_process_cacheline(req, data);
+ 
++  /* RFP never issues a memory request (the L1-miss-to-memory path is discarded — see
++   * dcache_process_lsq_rfp_queue), so an RFP prefetch never reaches this fill path. RFP-hit
++   * prefetches write the PRF directly in the FIFO drain. */
++
+   cycle_count = old_cycle_count;
+   return SUCCESS;
+ }
+@@ -528,6 +675,80 @@ static inline void dcache_miss_extra_access(Op* op, Cache* cache, Addr line_addr
+     STAT_EVENT_ALL(ONE_MORE_DISCARDED_MEM_REQ_FULL);
+ }
+ 
++/* A FIFO entry is live only while its load is the same dynamic op, still on-path, and has not
++   already been resolved at dispatch. Op structs are pooled, so the unique_num check matters. */
++static inline Flag rfp_owner_wants_prefetch(const Op* owner, const Lsq_Rfp_Req* req, uns8 proc_id) {
++  return owner && owner->op_pool_valid && owner->proc_id == proc_id && owner->unique_num == req->owner_unique &&
++         owner->op_num == req->owner_op_num && owner->inst_info->table_info.mem_type == MEM_LD && !owner->off_path &&
++         !owner->rfp_dropped_load_first && !owner->rfp_mispred_accounted;
++}
++
++/* Drain the RFP FIFO (lsq.cc) at most once per cycle. Called at the end of update_dcache_stage,
++   after all demand ops, so RFP only gets L1 read ports that demand loads left free. Stale and
++   satisfied entries are discarded. The oldest live entry then waits for older overlapping stores
++   and a free port. This blocks younger entries behind it. An L1 hit marks the load's PRF entry
++   ready DCACHE_CYCLES later. A miss is dropped. */
++static inline Flag dcache_process_lsq_rfp_queue(void) {
++  if (!RFP_ON)
++    return FALSE;
++
++  uns8 proc_id = dc->proc_id;
++  Lsq_Rfp_Req req;
++
++  /* Peek at the oldest request in the RFP FIFO, check if it is still valid and wants a prefetch. */
++  while (lsq_rfp_peek(proc_id, &req)) {
++    Op* owner = req.owner_op;
++    if (!rfp_owner_wants_prefetch(owner, &req, proc_id) ||
++        rfp_prf_ready(proc_id, req.prfid, owner->oracle_info.va, req.launch_cycle, req.owner_unique, NULL)) {
++      lsq_rfp_pop(proc_id);
++      continue;
++    }
++
++    {
++      uns load_size = owner->oracle_info.mem_size;
++      if (!load_size)
++        load_size = owner->inst_info->table_info.mem_size;
++
++      /* §3.2.1: defer L1 lookup until older overlapping stores complete. */
++      if (rfp_blocked_by_older_stores(proc_id, req.owner_op_num, owner->rfp_predicted_addr, load_size)) {
++        STAT_EVENT(proc_id, RFP_STORE_BUFFER_DEFER);
++        return FALSE;
++      }
++    }
++
++    /* Check if the RFP prefetch can win an L1 read port */
++    uns bank = BANK(req.predicted_line_addr, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR);
++    if (!get_read_port(&dc->ports[bank]))
++      return FALSE;
++
++    /* The L1-hit PRF write below is what marks the prefetch as started. An L1-missing RFP is
++       dropped, so it never writes the PRF. */
++
++    /* Check if the RFP prefetch hits the dcache */
++    Addr line_addr = req.predicted_line_addr;
++    Dcache_Data* line = (Dcache_Data*)cache_access(&dc->dcache, line_addr, &line_addr, TRUE);
++
++    if (line) {
++      /* L1 hit: the prefetch has won arbitration (the paper's RFP-inflight bit is now set) and the
++         value becomes usable DCACHE_CYCLES later (the L1-access latency). Recording the real ready
++         cycle is what lets a load that dispatches during this window get PARTIAL mitigation: it serves
++         from the PRF but completes at ready_cycle, while a load that dispatches after ready_cycle gets
++         FULL mitigation (done in 1 cycle). */
++      if (rfp_prf_write(proc_id, req.prfid, req.predicted_line_addr, cycle_count + DCACHE_CYCLES,
++                        req.owner_unique))
++        STAT_EVENT(proc_id, RFP_PREFETCH_EXECUTED);
++      lsq_rfp_pop(proc_id);
++    } else {
++      /* L1 miss: drop the RFP prefetch. The L1-miss-to-memory path is not modeled, so RFP hides
++         L1-hit latency only. See rfp_drop_on_l1_miss in rfp.param.def. */
++      STAT_EVENT(proc_id, RFP_DROPPED_ON_L1_MISS);
++      lsq_rfp_pop(proc_id);
++    }
++    return TRUE;
++  }
++  return FALSE;
++}
++
+ static inline Flag dcache_miss_new_mem_req(Op* op, Addr line_addr, Mem_Req_Type mem_req_type) {
+   return new_mem_req((mem_req_type), dc->proc_id, line_addr, DCACHE_LINE_SIZE,
+                      DCACHE_CYCLES - 1 + op->inst_info->extra_ld_latency, op, dcache_fill_line, op->unique_num, 0);
+diff --git a/src/icache_stage.c b/src/icache_stage.c
+index 71830bf..f213a10 100644
+--- a/src/icache_stage.c
++++ b/src/icache_stage.c
+@@ -57,6 +57,8 @@
+ #include "prefetcher/fdip.h"
+ #include "prefetcher/l2l1pref.h"
+ #include "prefetcher/stream_pref.h"
++#include "prefetcher/rfp.h"
++#include "prefetcher/rfp.param.h"
+ 
+ #include "cmp_model.h"
+ #include "decode_stage.h"
+@@ -912,6 +914,9 @@ static inline void icache_process_ops(Stage_Data* cur_data, Flag fetched_from_uo
+       FATAL_ERROR(ic->proc_id, "Access to 0x0\n");
+     }
+ 
++    /* RFP: PT lookup at fetch; prefetch launched at rename (map). */
++    rfp_predict_at_fetch(op);
++
+     if (DUMP_TRACE && DEBUG_RANGE_COND(ic->proc_id))
+       print_func_op(op);
+ 
+diff --git a/src/lsq.cc b/src/lsq.cc
+index a4640ff..a5ef5b1 100644
+--- a/src/lsq.cc
++++ b/src/lsq.cc
+@@ -44,6 +44,9 @@ extern "C" {
+ 
+ #include "exec_ports.h"
+ #include "node_stage.h"
++
++#include "prefetcher/rfp.param.h"
++#include "statistics.h"
+ }
+ 
+ #include <deque>
+@@ -58,6 +61,10 @@ struct LSQ_Entry {
+   Counter unique_num = 0;
+   Flag off_path = 0;
+   Mem_Type mem_type = {};
++  /* RFP-only fields. An RFP FIFO entry reuses LSQ_Entry and points at its load's Op. */
++  Addr rfp_predicted_line_addr = 0;
++  uns16 rfp_prfid = 0;
++  Counter rfp_launch_cycle = 0;
+ 
+   LSQ_Entry() {}
+   LSQ_Entry(Op* mem_op)
+@@ -66,6 +73,15 @@ struct LSQ_Entry {
+         unique_num(mem_op->unique_num),
+         off_path(mem_op->off_path),
+         mem_type(mem_op->inst_info->table_info.mem_type) {}
++  LSQ_Entry(Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle)
++      : op(owner_op),
++        op_num(owner_op->op_num),
++        unique_num(owner_op->unique_num),
++        off_path(owner_op->off_path),
++        mem_type(MEM_LD),
++        rfp_predicted_line_addr(predicted_line_addr),
++        rfp_prfid(prfid),
++        rfp_launch_cycle(launch_cycle) {}
+ };
+ 
+ class LSQ {
+@@ -73,27 +89,40 @@ class LSQ {
+   uns8 proc_id = 0;
+   Mem_Type mem_type = {};
+   size_t entry_num = 0;
++  /* Dedicated RFP FIFO capacity (separate from demand entry_num). Only the load queue has one. */
++  size_t rfp_entry_num = 0;
+ 
+   std::deque<LSQ_Entry> entries;
++  /* RFP FIFO, oldest first. Filled at rename (rfp.c:rfp_prefetch_launch_prf) and drained by
++     dcache_stage.c:dcache_process_lsq_rfp_queue. Requests never occupy demand entries. */
++  std::deque<LSQ_Entry> rfp_fifo_entries;
+ 
+  public:
+   void init(uns8 proc_id, Mem_Type mem_type, size_t entry_num);
+   void allocate(Op* mem_op);
++  Flag allocate_rfp(Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle);
+   void free(Op* mem_op);
+   bool available();
+   void recover(Counter flush_op_num);
++  void drop_rfp_upto(Counter op_num);
++  Flag peek_rfp(Lsq_Rfp_Req* out_req) const;
++  void pop_rfp();
+ 
+   LSQ(){};
+   const std::deque<LSQ_Entry>& get_entries() const { return entries; }
+ };
+ 
++/* Initialize the LSQ */
+ void LSQ::init(const uns8 proc_id, const Mem_Type mem_type, const size_t entry_num) {
+   this->proc_id = proc_id;
+   this->mem_type = mem_type;
+   this->entry_num = entry_num;
++  this->rfp_entry_num = (mem_type == MEM_LD) ? RFP_LSQ_FIFO_SIZE : 0;
+   entries.clear();
++  rfp_fifo_entries.clear();
+ }
+ 
++/* Allocate an entry for a load operation */
+ void LSQ::allocate(Op* mem_op) {
+   ASSERT(proc_id, entries.size() < entry_num);
+   ASSERT(proc_id, mem_op->inst_info->table_info.mem_type == this->mem_type);
+@@ -101,15 +130,36 @@ void LSQ::allocate(Op* mem_op) {
+   entries.emplace_back(mem_op);
+ }
+ 
++/* Allocate an entry in the RFP FIFO for an RFP prefetch request */
++Flag LSQ::allocate_rfp(Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle) {
++  if (!owner_op || owner_op->inst_info->table_info.mem_type != MEM_LD)
++    return FALSE;
++  
++  if (rfp_fifo_entries.size() >= rfp_entry_num) {
++    STAT_EVENT(proc_id, RFP_LSQ_FIFO_FULL);
++    return FALSE;
++  }
++  
++  rfp_fifo_entries.emplace_back(owner_op, predicted_line_addr, prfid, launch_cycle);
++  return TRUE;
++}
++
++/* Remove an entry from the LSQ. Searches by op instead of popping the front, as on hpca2027-rfp. */
+ void LSQ::free(Op* mem_op) {
+   ASSERT(proc_id, !entries.empty());
+   ASSERT(proc_id, mem_op->inst_info->table_info.mem_type == this->mem_type);
+   ASSERT(proc_id, !mem_op->off_path);
+ 
+-  ASSERT(proc_id, entries.front().op_num == mem_op->op_num);
+-  entries.pop_front();
++  for (auto it = entries.begin(); it != entries.end(); ++it) {
++    if (it->op_num == mem_op->op_num && it->unique_num == mem_op->unique_num) {
++      entries.erase(it);
++      return;
++    }
++  }
++  ASSERT(proc_id, FALSE);
+ }
+ 
++/* Check if the LSQ is available for a load operation */
+ bool LSQ::available() {
+   ASSERT(proc_id, entries.size() <= entry_num);
+   if (entries.size() == entry_num) {
+@@ -119,6 +169,7 @@ bool LSQ::available() {
+   return true;
+ }
+ 
++/* Recover the LSQ from a flush */
+ void LSQ::recover(Counter flush_op_num) {
+   while (!entries.empty()) {
+     auto& back_entry = entries.back();
+@@ -128,13 +179,51 @@ void LSQ::recover(Counter flush_op_num) {
+       break;
+     }
+ 
+-    // Free this off-path mem op from the back
++    // Free younger demand entries from the back.
+     ASSERT(proc_id, !entries.empty());
+-    ASSERT(proc_id, back_entry.op->off_path);
+-    ASSERT(proc_id, entries.back().op_num == back_entry.op->op_num);
+-    ASSERT(proc_id, back_entry.op->inst_info->table_info.mem_type == this->mem_type);
++    ASSERT(proc_id, entries.back().op_num == back_entry.op_num);
++    ASSERT(proc_id, back_entry.mem_type == this->mem_type);
+     entries.pop_back();
+   }
++
++  /* Scan the RFP FIFO and remove entries that are older than the flush operation */
++  for (auto it = rfp_fifo_entries.begin(); it != rfp_fifo_entries.end();) {
++    if (it->op_num >= flush_op_num)
++      it = rfp_fifo_entries.erase(it);
++    else
++      ++it;
++  }
++}
++
++/* Drop RFP entries up to a given op number. Called at load commit, since a retired load no longer
++   needs its prefetch. */
++void LSQ::drop_rfp_upto(Counter op_num) {
++  for (auto it = rfp_fifo_entries.begin(); it != rfp_fifo_entries.end();) {
++    if (it->op_num <= op_num)
++      it = rfp_fifo_entries.erase(it);
++    else
++      ++it;
++  }
++}
++
++/* Peek at the oldest RFP prefetch request in the FIFO */
++Flag LSQ::peek_rfp(Lsq_Rfp_Req* out_req) const {
++  if (!out_req || rfp_fifo_entries.empty())
++    return FALSE;
++  const auto& entry = rfp_fifo_entries.front();
++  out_req->owner_op = entry.op;
++  out_req->owner_unique = entry.unique_num;
++  out_req->owner_op_num = entry.op_num;
++  out_req->predicted_line_addr = entry.rfp_predicted_line_addr;
++  out_req->prfid = entry.rfp_prfid;
++  out_req->launch_cycle = entry.rfp_launch_cycle;
++  return TRUE;
++}
++
++/* Pop the oldest RFP prefetch request from the FIFO */
++void LSQ::pop_rfp() {
++  if (!rfp_fifo_entries.empty())
++    rfp_fifo_entries.pop_front();
+ }
+ 
+ /**************************************************************************************/
+@@ -154,6 +243,10 @@ class LSQ_Unit {
+   void dispatch(Op* mem_op);
+   void recover(Counter flush_op_num);
+   void commit(Op* mem_op);
++  Flag rfp_enqueue(Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle);
++  Flag rfp_peek(Lsq_Rfp_Req* out_req) const;
++  void rfp_pop();
++  Flag older_store_overlaps(Counter younger_op_num, Addr addr, uns size) const;
+ };
+ 
+ LSQ_Unit::LSQ_Unit(uns8 proc_id) {
+@@ -222,6 +315,7 @@ void LSQ_Unit::commit(Op* mem_op) {
+   switch (mem_op->inst_info->table_info.mem_type) {
+     case MEM_LD:
+       load_queue.free(mem_op);
++      load_queue.drop_rfp_upto(mem_op->op_num);
+       break;
+ 
+     case MEM_ST:
+@@ -234,6 +328,52 @@ void LSQ_Unit::commit(Op* mem_op) {
+   }
+ }
+ 
++Flag LSQ_Unit::rfp_enqueue(Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle) {
++  return load_queue.allocate_rfp(owner_op, predicted_line_addr, prfid, launch_cycle);
++}
++
++Flag LSQ_Unit::rfp_peek(Lsq_Rfp_Req* out_req) const {
++  return load_queue.peek_rfp(out_req);
++}
++
++void LSQ_Unit::rfp_pop() {
++  load_queue.pop_rfp();
++}
++
++/* ISCA'22 §3.2.1 — scan older in-flight stores (youngest-first) for address overlap. */
++Flag LSQ_Unit::older_store_overlaps(Counter younger_op_num, Addr addr, uns size) const {
++  uns st_size;
++  Addr st_va;
++
++  if (!addr || !size)
++    return FALSE;
++
++  for (const auto& entry : store_queue.get_entries()) {
++    Op* st_op;
++
++    if (entry.op_num >= younger_op_num)
++      continue;
++
++    st_op = entry.op;
++    if (!st_op || st_op->off_path)
++      continue;
++
++    st_va = st_op->oracle_info.va;
++    st_size = st_op->oracle_info.mem_size;
++    if (!st_size)
++      st_size = st_op->inst_info->table_info.mem_size;
++
++    /* Store address not yet known — MD would make RFP wait (§3.2.1). */
++    if (!st_va)
++      return TRUE;
++
++    if (BYTE_OVERLAP(st_va, st_size, addr, size))
++      return TRUE;
++  }
++
++  return FALSE;
++}
++
+ /**************************************************************************************/
+ /* Global Values */
+ 
+@@ -318,14 +458,42 @@ void lsq_commit(Op* mem_op) {
+ 
+ /**************************************************************************************/
+ 
++Flag lsq_rfp_enqueue(uns8 proc_id, Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle) {
++  if (!LSQ_ENABLE)
++    return FALSE;
++  if (!owner_op || proc_id >= per_core_lsq_unit.size())
++    return FALSE;
++  return per_core_lsq_unit[proc_id].rfp_enqueue(owner_op, predicted_line_addr, prfid, launch_cycle);
++}
++
++Flag lsq_rfp_peek(uns8 proc_id, Lsq_Rfp_Req* out_req) {
++  if (!LSQ_ENABLE || proc_id >= per_core_lsq_unit.size())
++    return FALSE;
++  return per_core_lsq_unit[proc_id].rfp_peek(out_req);
++}
++
++void lsq_rfp_pop(uns8 proc_id) {
++  if (!LSQ_ENABLE || proc_id >= per_core_lsq_unit.size())
++    return;
++  per_core_lsq_unit[proc_id].rfp_pop();
++}
++
++Flag lsq_older_store_overlaps(uns8 proc_id, Counter younger_op_num, Addr addr, uns size) {
++  if (!LSQ_ENABLE || proc_id >= per_core_lsq_unit.size())
++    return FALSE;
++  return per_core_lsq_unit[proc_id].older_store_overlaps(younger_op_num, addr, size);
++}
++
++/**************************************************************************************/
++
+ int lsq_get_in_flight_load_num() {
+   if (!LSQ_ENABLE)
+     return 0;
+ 
+   int in_flight_num = 0;
+-  const auto& store_entries = lsq_unit->get_queue(MEM_LD)->get_entries();
+-  for (const auto& entry : store_entries) {
+-    if (entry.op->state >= OS_IN_RS)
++  const auto& load_entries = lsq_unit->get_queue(MEM_LD)->get_entries();
++  for (const auto& entry : load_entries) {
++    if (entry.op && entry.op->state >= OS_IN_RS)
+       in_flight_num++;
+   }
+ 
+diff --git a/src/lsq.h b/src/lsq.h
+index febcad2..1588893 100644
+--- a/src/lsq.h
++++ b/src/lsq.h
+@@ -48,6 +48,20 @@ Flag lsq_available(Mem_Type mem_type);  // check if there is an available LSQ en
+ void lsq_dispatch(Op* mem_op);          // insert mem op into LSQ when mem op is inserted into ROB
+ void lsq_commit(Op* mem_op);            // free the entry when the mem op is retired
+ 
++typedef struct Lsq_Rfp_Req_struct {
++  Op* owner_op;
++  Counter owner_unique;
++  Counter owner_op_num;
++  Addr predicted_line_addr;
++  uns16 prfid;
++  Counter launch_cycle;
++} Lsq_Rfp_Req;
++
++Flag lsq_rfp_enqueue(uns8 proc_id, Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle);
++Flag lsq_rfp_peek(uns8 proc_id, Lsq_Rfp_Req* out_req);
++void lsq_rfp_pop(uns8 proc_id);
++Flag lsq_older_store_overlaps(uns8 proc_id, Counter younger_op_num, Addr addr, uns size);
++
+ int lsq_get_in_flight_load_num();
+ 
+ #ifdef __cplusplus
+diff --git a/src/map_rename.c b/src/map_rename.c
+index 7781d48..abd9aaf 100644
+--- a/src/map_rename.c
++++ b/src/map_rename.c
+@@ -141,7 +141,8 @@ static inline void reg_file_debug_print_table(uns reg_table_type) {
+ }
+ 
+ // only process general purpose and vector registers for the renaming allocation
+-static inline int reg_file_get_reg_type(int reg_id) {
++// Exported (was static inline) so rfp_prf.c can tell integer from vector destinations.
++int reg_file_get_reg_type(int reg_id) {
+   if ((reg_id >= REG_RAX && reg_id < REG_CS) || (reg_id >= REG_TMP0 && reg_id <= REG_TMP4) ||
+       (reg_id >= REG_ZPS && reg_id < REG_ZMM0))
+     return REG_FILE_REG_TYPE_GENERAL_PURPOSE;
+@@ -1806,6 +1807,38 @@ struct reg_renaming_scheme_func reg_renaming_scheme_func_table[REG_RENAMING_SCHE
+ };
+ // clang-format on
+ 
++/**************************************************************************************/
++/* Register-file utilization diagnostics */
++
++void reg_file_collect_utilization_stat(void) {
++  Counter total_regs[REG_FILE_REG_TYPE_NUM] = {0};
++  Counter occupied_regs[REG_FILE_REG_TYPE_NUM] = {0};
++  Flag sampled = FALSE;
++
++  for (uns reg_type = 0; reg_type < REG_FILE_REG_TYPE_NUM; ++reg_type) {
++    if (!map_data->reg_file[reg_type])
++      continue;
++
++    struct reg_table *physical_table = map_data->reg_file[reg_type]->reg_table[REG_TABLE_TYPE_PHYSICAL];
++    if (!physical_table || !physical_table->free_list)
++      continue;
++
++    ASSERT(map_data->proc_id, physical_table->size >= physical_table->free_list->reg_free_num);
++    total_regs[reg_type] = physical_table->size;
++    occupied_regs[reg_type] = physical_table->size - physical_table->free_list->reg_free_num;
++    sampled = TRUE;
++  }
++
++  if (!sampled)
++    return;
++
++  STAT_EVENT(map_data->proc_id, REG_FILE_UTIL_SAMPLES);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_VECTOR]);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_VECTOR]);
++}
++
+ /**************************************************************************************/
+ /* External Calling */
+ 
+diff --git a/src/map_rename.h b/src/map_rename.h
+index 02fc21b..33a6ba4 100644
+--- a/src/map_rename.h
++++ b/src/map_rename.h
+@@ -220,5 +220,7 @@ void reg_file_produce(Op *op);                // write back the dst registers
+ void reg_file_recover(Op *op);                // flush registers of misprediction operands
+ void reg_file_precommit(Op *op);              // update the register metadata when an op is non-spec
+ void reg_file_commit(Op *op);                 // release the previous register with same architectural register id
++int  reg_file_get_reg_type(int reg_id);       // used by RFP (rfp_prf.c)
++void reg_file_collect_utilization_stat(void); // sample physical register-file occupancy once per cycle
+ 
+ #endif /* #ifndef __MAP_RENAME_H__ */
+diff --git a/src/map_stage.c b/src/map_stage.c
+index a7b5aa0..db1c35a 100644
+--- a/src/map_stage.c
++++ b/src/map_stage.c
+@@ -49,6 +49,7 @@
+ #include "ft.h"
+ #include "map.h"
+ #include "map_rename.h"
++#include "prefetcher/rfp.h"
+ #include "model.h"
+ #include "op_pool.h"
+ #include "statistics.h"
+@@ -191,6 +192,8 @@ void debug_map_stage() {
+ /* map_cycle: */
+ 
+ void update_map_stage(Stage_Data* src_sd) {
++  reg_file_collect_utilization_stat();
++
+   /* stall if the renaming table is full */
+   if (!reg_file_available(STAGE_MAX_OP_COUNT)) {
+     map->reg_file_stall = TRUE;
+@@ -262,6 +265,9 @@ static inline void stage_process_op(Op* op) {
+   /* register renaming allocation */
+   reg_file_rename(op);
+ 
++  /* RFP: prediction at icache fetch; prefetch launch at rename */
++  rfp_prefetch_launch(op);
++
+   /* setting wake up lists */
+   add_to_wake_up_lists(op, model->wake_hook);
+ }
+diff --git a/src/memory/mem_req.h b/src/memory/mem_req.h
+index 98885ab..cebf7e8 100644
+--- a/src/memory/mem_req.h
++++ b/src/memory/mem_req.h
+@@ -174,6 +174,11 @@ struct Mem_Req_struct {
+   Flag wb_used_onpath;                       /* is this a writeback that was used onpath? */
+   Addr loadPC;                               /* load PC of the oldest load requesting this address */
+   uns8 prefetcher_id;                        /* which Prefetcher sent this prefetch */
++  Flag rfp_prefetch;                         /* is this a RFP prefetch? */
++  uns16 rfp_prfid;                           /* physical register ID (prfid) */  
++  Addr rfp_predicted_va;                     /* predicted virtual address */
++  Counter rfp_launch_cycle;                  /* RFP launch cycle (PRF model) */
++  Counter rfp_owner_unique;                  /* unique number of the operation that owns this PRF entry */
+ 
+   uns pref_distance; /* prefetch distance (currently works for pref_stream only)
+                       */
+diff --git a/src/memory/memory.c b/src/memory/memory.c
+index 48cdf87..19b4694 100644
+--- a/src/memory/memory.c
++++ b/src/memory/memory.c
+@@ -53,6 +53,8 @@
+ #include "prefetcher/fdip.h"
+ #include "prefetcher/l2l1pref.h"
+ #include "prefetcher/pref_common.h"
++#include "prefetcher/rfp.h"
++#include "prefetcher/rfp_prf.h"
+ #include "prefetcher/stream_pref.h"
+ 
+ #include "addr_trans.h"
+@@ -139,6 +141,7 @@ static Flag mem_complete_l1_access(Mem_Req* req, Mem_Queue_Entry* l1_queue_entry
+                                    int* reserved_entry_count);
+ 
+ static inline Mem_Queue_Entry* mem_insert_req_into_queue(Mem_Req* new_req, Mem_Queue* queue, Counter priority);
++static Flag mem_remove_reqbuf_from_queue(Mem_Queue* queue, int reqbuf_id);
+ static inline Flag insert_new_req_into_l1_queue(uns proc_id, Mem_Req* new_req);
+ static inline Flag insert_new_req_into_mlc_queue(uns proc_id, Mem_Req* new_req);
+ 
+@@ -340,6 +343,7 @@ void init_memory() {
+   if (STREAM_PREFETCH_ON)
+     init_stream_HWP();
+   pref_init();
++  rfp_init();
+   mem->pref_replpos = INSERT_REPL_MRU;
+   if (PREF_ANALYZE_LOAD) {
+     mem->pref_loadPC_hash = (Hash_Table*)malloc(sizeof(Hash_Table));
+@@ -583,6 +587,53 @@ void mem_free_reqbuf(Mem_Req* req) {
+   ASSERT(req->proc_id, (mem->req_count + mem->req_buffer_free_list.count) == mem->total_mem_req_buffers);
+ }
+ 
++/**************************************************************************************/
++/* mem_remove_reqbuf_from_queue: */
++static Flag mem_remove_reqbuf_from_queue(Mem_Queue* queue, int reqbuf_id) {
++  int ii;
++  for (ii = 0; ii < queue->entry_count; ii++) {
++    if (queue->base[ii].reqbuf == reqbuf_id) {
++      queue->entry_count--;
++      if (ii != queue->entry_count) {
++        queue->base[ii] = queue->base[queue->entry_count];
++      }
++      return TRUE;
++    }
++  }
++  return FALSE;
++}
++
++/**************************************************************************************/
++/* Cancel an RFP prefetch request, due to a wrong address prediction or a load beating the prefetch.
++ * RFP no longer sends requests to memory (no Pref_Req_Info sets rfp_prefetch), so this and the other
++ * rfp_* request fields in this file are inert. They are kept so the port matches hpca2027-rfp. */
++Flag mem_cancel_rfp_prefetch(uns8 proc_id, uns16 prfid, Counter launch_cycle, Counter owner_unique) {
++  int ii;
++  /* Iterate through all the request buffers */
++  for (ii = 0; ii < mem->total_mem_req_buffers; ii++) {
++    Mem_Req* req = &mem->req_buffer[ii];
++
++    /* Check if the request is valid and matches the RFP prefetch request */
++    if (req->state == MRS_INV || req->proc_id != proc_id || !req->rfp_prefetch)
++      continue;
++    if (req->rfp_prfid != prfid || req->rfp_launch_cycle != launch_cycle || req->rfp_owner_unique != owner_unique)
++      continue;
++
++    /* return false if the request is not in the L1 or MLC new queue */
++    if (req->state != MRS_L1_NEW && req->state != MRS_MLC_NEW)
++      return FALSE;
++
++    if (!req->queue || !mem_remove_reqbuf_from_queue(req->queue, req->id))
++      return FALSE;
++
++    /* Remove the request from the queue and free the request buffer */
++    req->queue = NULL;
++    mem_free_reqbuf(req);
++    return TRUE;
++  }
++  return FALSE;
++}
++
+ /**************************************************************************************/
+ /* queue_full: */
+ 
+@@ -600,6 +651,12 @@ static inline uns queue_num_free(Mem_Queue* queue) {
+   return (queue->size - queue->reserved_entry_count) - queue->entry_count;
+ }
+ 
++/* Number of currently-free request buffers in the shared pool. Used by the RFP demand-reserve
++ * gate to throttle RFP prefetches under buffer pressure. */
++uns mem_num_free_req_buffers(void) {
++  return (uns)mem->req_buffer_free_list.count;
++}
++
+ /**************************************************************************************/
+ /* print_mem_queue: */
+ 
+@@ -880,6 +937,13 @@ void mem_start_mlc_access(Mem_Req* req) {
+ 
+     avail = TRUE;
+     req->state = MRS_MLC_WAIT;
++
++    /* If the request is an RFP prefetch, mark it as inflight */
++    if (RFP_ON && req->rfp_prefetch && req->rfp_launch_cycle &&
++        !rfp_prf_is_inflight(req->proc_id, req->rfp_prfid, req->rfp_owner_unique)) {
++      rfp_prf_set_inflight(req->proc_id, req->rfp_prfid, req->rfp_owner_unique);
++      STAT_EVENT(req->proc_id, RFP_PREFETCH_INFLIGHT);
++    }
+     req->rdy_cycle = cycle_count + MLC_CYCLES;
+   }
+ 
+@@ -908,6 +972,13 @@ void mem_start_l1_access(Mem_Req* req) {
+ 
+     avail = TRUE;
+     req->state = MRS_L1_WAIT;
++
++    /* If the request is an RFP prefetch, mark it as inflight */
++    if (RFP_ON && req->rfp_prefetch && req->rfp_launch_cycle &&
++        !rfp_prf_is_inflight(req->proc_id, req->rfp_prfid, req->rfp_owner_unique)) {
++      rfp_prf_set_inflight(req->proc_id, req->rfp_prfid, req->rfp_owner_unique);
++      STAT_EVENT(req->proc_id, RFP_PREFETCH_INFLIGHT);
++    }
+     if (L1_USE_CORE_FREQ) {
+       // model cache as being in the requesting core's frequency domain
+       // useful for modeling per-core DVFS with private LLCs
+@@ -3353,6 +3424,7 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
+   Flag ramulator_match = FALSE;
+   Counter priority_offset = freq_cycle_count(FREQ_DOMAIN_L1);
+   Counter new_priority;
++  Op* op_for_adjust = (pref_info && pref_info->rfp_prefetch) ? NULL : op;
+   Flag to_mlc = MLC_PRESENT && (!pref_info || pref_info->dest != DEST_L1);
+   Destination destination = (pref_info ? pref_info->dest : DEST_NONE);
+ 
+@@ -3430,7 +3502,7 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
+     }
+ 
+     // cmp FIXME cmp support
+-    return (mem_adjust_matching_request(matching_req, type, addr, size, destination, delay, op, done_func, unique_num,
++    return (mem_adjust_matching_request(matching_req, type, addr, size, destination, delay, op_for_adjust, done_func, unique_num,
+                                         demand_hit_prefetch, demand_hit_writeback, &queue_entry, new_priority,
+                                         ramulator_match));
+   }
+@@ -3553,6 +3625,24 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
+   new_req->global_hist = (pref_info ? pref_info->global_hist : 0);
+   new_req->bw_prefetch = (pref_info ? pref_info->bw_limited : FALSE);
+   new_req->destination = destination;
++  /* If the request is an RFP prefetch, set the RFP metadata */
++  new_req->rfp_prefetch = (pref_info ? pref_info->rfp_prefetch : FALSE);
++  new_req->rfp_prfid = (pref_info ? pref_info->rfp_prfid : 0);
++  new_req->rfp_predicted_va = (pref_info ? pref_info->rfp_predicted_va : 0);
++  new_req->rfp_launch_cycle = (pref_info ? pref_info->rfp_launch_cycle : 0);
++  new_req->rfp_owner_unique = (pref_info ? pref_info->rfp_owner_unique : 0);
++
++  /* Remove owner context from the request */
++  if (new_req->rfp_prefetch && op && new_req->op_count) {
++    clear_list(&new_req->op_ptrs);
++    clear_list(&new_req->op_uniques);
++    new_req->op_count = 0;
++    new_req->oldest_op_unique_num = 0;
++    new_req->oldest_op_op_num = 0;
++    new_req->oldest_op_addr = 0;
++    if (op->req == new_req)
++      op->req = NULL;
++  }
+   if (type == MRT_FDIPPRFON || type == MRT_FDIPPRFOFF) {
+     if (fdip_off_path(proc_id, 0))
+       new_req->fdip_pref_off_path = 1;
+diff --git a/src/memory/memory.h b/src/memory/memory.h
+index 6cffe73..7e173f2 100644
+--- a/src/memory/memory.h
++++ b/src/memory/memory.h
+@@ -200,6 +200,11 @@ typedef struct Pref_Req_Info_Struct {
+   uns distance;
+   Flag bw_limited;
+   Destination dest;  // Only MLC/L2 values matter
++  Flag rfp_prefetch;  // Is this a RFP prefetch?
++  uns16 rfp_prfid;    // Physical dest reg for RFP writeback
++  Addr rfp_predicted_va;
++  Counter rfp_launch_cycle;  // Cycle when RFP prefetch launched (PRF model)
++  Counter rfp_owner_unique;
+ } Pref_Req_Info;
+ 
+ typedef enum L1_Dyn_Partition_Policy_enum {
+@@ -226,6 +231,7 @@ void debug_memory(void);
+ void update_memory(void);
+ 
+ Flag scan_stores(Addr, uns);
++uns mem_num_free_req_buffers(void);
+ void op_nuke_mem_req(Op*);
+ Flag mem_req_younger_than_uniquenum(int, Counter);
+ Flag mem_req_older_than_uniquenum(int, Counter);
+@@ -237,6 +243,7 @@ L1_Data* do_mlc_access_addr(Addr);
+ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay, Op* op, Flag done_func(Mem_Req*),
+                  Counter unique_num, Pref_Req_Info*);
+ void mem_free_reqbuf(Mem_Req* req);
++Flag mem_cancel_rfp_prefetch(uns8 proc_id, uns16 prfid, Counter launch_cycle, Counter owner_unique);
+ void mem_complete_bus_in_access(Mem_Req* req, Counter priority);
+ void print_req_buffer(void);
+ void print_mem_queue(Mem_Queue_Type queue_type);
+diff --git a/src/memory/memory.stat.def b/src/memory/memory.stat.def
+index 82d8462..41abdd9 100644
+--- a/src/memory/memory.stat.def
++++ b/src/memory/memory.stat.def
+@@ -200,6 +200,11 @@ DEF_STAT(  DCACHE_MISS		   , DIST  , NO_RATIO  )
+ DEF_STAT(  DCACHE_ST_BUFFER_HIT	   , COUNT , NO_RATIO  )
+ DEF_STAT(  DCACHE_HIT		   , DIST  , NO_RATIO  )
+ 
++     /* demand accesses issued to the L1-D (one per op that reaches the dcache).
++        Total issued = ONPATH + OFFPATH. */
++DEF_STAT(  DCACHE_ACCESS_ONPATH	   , COUNT , NO_RATIO  )
++DEF_STAT(  DCACHE_ACCESS_OFFPATH   , COUNT , NO_RATIO  )
++
+ DEF_STAT(  DCACHE_MISS_ONPATH		   , DIST  , NO_RATIO  )
+ DEF_STAT(  DCACHE_MISS_OFFPATH		   , DIST  , NO_RATIO  )
+ 
+diff --git a/src/node_stage.c b/src/node_stage.c
+index 02dae09..9f80e7a 100644
+--- a/src/node_stage.c
++++ b/src/node_stage.c
+@@ -61,6 +61,7 @@
+ #include "map_rename.h"
+ #include "op_pool.h"
+ #include "sim.h"
++#include "prefetcher/rfp.h"
+ #include "statistics.h"
+ #include "thread.h"
+ #include "xed-iclass-enum.h"
+@@ -523,6 +524,63 @@ void node_retire() {
+ 
+     node->ret_op++;
+ 
++    /* Train RFP table on committed load */
++    rfp_train_retire(op);
++
++    /* Accumulate on-path load latency (retire guarantees on-path here). */
++    if (op->inst_info->table_info.mem_type == MEM_LD && op->fetch_cycle != MAX_CTR &&
++        op->exec_cycle != MAX_CTR && op->done_cycle != MAX_CTR) {
++      if (op->exec_cycle >= op->fetch_cycle) {
++        INC_STAT_EVENT(op->proc_id, LD_EXEC_MINUS_FETCH_LATENCY, op->exec_cycle - op->fetch_cycle);
++      }
++      if (cycle_count >= op->fetch_cycle) {
++        INC_STAT_EVENT(op->proc_id, LD_RETIRE_MINUS_FETCH_LATENCY, cycle_count - op->fetch_cycle);
++      }
++      if (op->done_cycle >= op->exec_cycle) {
++        INC_STAT_EVENT(op->proc_id, LD_EXEC_TO_DONE_LATENCY, op->done_cycle - op->exec_cycle);
++      }
++
++      if (RFP_ON) {
++        if (op->exec_cycle >= op->fetch_cycle) {
++          INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_MINUS_FETCH, op->exec_cycle - op->fetch_cycle);
++        }
++        if (cycle_count >= op->fetch_cycle) {
++          INC_STAT_EVENT(op->proc_id, RFP_LD_RETIRE_MINUS_FETCH, cycle_count - op->fetch_cycle);
++        }
++        if (op->done_cycle >= op->exec_cycle) {
++          INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_TO_DONE, op->done_cycle - op->exec_cycle);
++        }
++
++        if (op->rfp_served) {
++          if (op->exec_cycle >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_MINUS_FETCH_SERVED,
++                           op->exec_cycle - op->fetch_cycle);
++          }
++          if (cycle_count >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, RFP_LD_RETIRE_MINUS_FETCH_SERVED,
++                           cycle_count - op->fetch_cycle);
++          }
++          if (op->done_cycle >= op->exec_cycle) {
++            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_TO_DONE_SERVED,
++                           op->done_cycle - op->exec_cycle);
++          }
++        } else {
++          if (op->exec_cycle >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_MINUS_FETCH_DEMAND,
++                           op->exec_cycle - op->fetch_cycle);
++          }
++          if (cycle_count >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, RFP_LD_RETIRE_MINUS_FETCH_DEMAND,
++                           cycle_count - op->fetch_cycle);
++          }
++          if (op->done_cycle >= op->exec_cycle) {
++            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_TO_DONE_DEMAND,
++                           op->done_cycle - op->exec_cycle);
++          }
++        }
++      }
++    }
++
+     STAT_EVENT(op->proc_id, RET_ALL_INST);
+ 
+     remove_from_seq_op_list(td, op);
+diff --git a/src/op.h b/src/op.h
+index b9c7b80..a2cb204 100644
+--- a/src/op.h
++++ b/src/op.h
+@@ -239,6 +239,18 @@ struct Op_struct {
+   uns16 dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];       // the reg id of allocated reg file entries
+   uns16 prev_dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];  // the previous dst reg id with the same parent register id
+   // }}}
++
++  // {{{ Register File Prefetch (RFP)
++  Flag rfp_predicted;              /* PT confident at rename; load is RFP-eligible */
++  Addr rfp_predicted_addr;         /* Predicted address from PT */
++  Counter rfp_launch_cycle;        /* Cycle when RFP prefetch request was launched, 0 if none */
++  uns16 rfp_prfid;                 /* Phys dest reg (prfid), set at rename launch */
++  Flag rfp_mispred_accounted;      /* Count wrong-address clear once per op */
++  Flag rfp_dropped_load_first;     /* Dropped prefetch request due to load reaching demand path first */
++  Flag rfp_served;                 /* Served from PRF; demand load was not issued */
++  Flag rfp_partial_mitigated;      /* Served but prefetch data not ready until after dispatch */
++  Flag rfp_pred_resolved;          /* Prediction outcome counted at dcache */
++  // }}}
+   FT* parent_FT;
+   FT* parent_FT_off_path;
+ };
+diff --git a/src/param_files.def b/src/param_files.def
+index 7f2533b..44e1d46 100644
+--- a/src/param_files.def
++++ b/src/param_files.def
+@@ -45,3 +45,4 @@
+ #include "prefetcher/pref_phase.param.def"
+ #include "prefetcher/pref_2dc.param.def"
+ #include "prefetcher/pref_markov.param.def"
++#include "prefetcher/rfp.param.def"
+diff --git a/src/power/power.stat.def b/src/power/power.stat.def
+index cf55535..470b8e7 100644
+--- a/src/power/power.stat.def
++++ b/src/power/power.stat.def
+@@ -67,6 +67,10 @@ DEF_STAT(  POWER_ICACHE_ACCESS                ,     COUNT, NO_RATIO )
+ DEF_STAT(  POWER_ICACHE_MISS                  ,     COUNT, NO_RATIO )
+ DEF_STAT(  POWER_BTB_READ                     ,     COUNT, NO_RATIO )
+ DEF_STAT(  POWER_BTB_WRITE                    ,     COUNT, NO_RATIO )
++DEF_STAT(  POWER_RFP_PT_READ                  ,     COUNT, NO_RATIO )
++DEF_STAT(  POWER_RFP_PT_WRITE                 ,     COUNT, NO_RATIO )
++DEF_STAT(  POWER_RFP_PAT_READ                 ,     COUNT, NO_RATIO )
++DEF_STAT(  POWER_RFP_PAT_WRITE                ,     COUNT, NO_RATIO )
+ DEF_STAT(  POWER_ROB_READ                     ,     COUNT, NO_RATIO )
+ DEF_STAT(  POWER_ROB_WRITE                    ,     COUNT, NO_RATIO )
+ DEF_STAT(  POWER_RENAME_READ                  ,     COUNT, NO_RATIO )
+diff --git a/src/power/power_scarab_config.cc b/src/power/power_scarab_config.cc
+index 71d580e..84c5d79 100644
+--- a/src/power/power_scarab_config.cc
++++ b/src/power/power_scarab_config.cc
+@@ -45,6 +45,7 @@ extern "C" {
+ #include "general.param.h"
+ #include "memory/memory.param.h"
+ #include "power/power.param.h"
++#include "prefetcher/rfp.param.h"
+ #include "ramulator.param.h"
+ 
+ #include "ramulator.h"
+@@ -559,6 +560,40 @@ static void power_print_core_btb(std::ofstream& out, uint32_t core_id) {
+   END_OF_COMPONENT(out, header);
+ }
+ 
++/* ISCA'22 Table 1 compressed entry sizes (bytes), rounded up for CACTI SRAM modeling. */
++static constexpr int RFP_PT_ENTRY_BYTES = 8;
++static constexpr int RFP_PAT_ENTRY_BYTES = 8;
++
++static std::string rfp_sram_config_str(int num_sets, int num_ways, int entry_bytes) {
++  int capacity = num_sets * num_ways * entry_bytes;
++  return std::to_string(capacity) + "," + std::to_string(entry_bytes) + "," + std::to_string(num_ways) +
++         ",1,1,1";
++}
++
++static void power_print_core_rfp(std::ofstream& out, uint32_t core_id) {
++  if (!RFP_ON)
++    return;
++
++  std::string header = "\t\t";
++  ADD_XML_PARAM(out, "\t", "rfp_on", 1, "Enable RFP PT/PAT SRAM power modeling in McPAT");
++
++  ADD_XML_COMPONENT(out, header, "system.core" + std::to_string(core_id) + ".rfp_pt", "RFP_PT", );
++  ADD_XML_PARAM_str(out, header, "rfp_config",
++                    rfp_sram_config_str(RFP_PT_NUM_SETS, RFP_PT_NUM_WAYS, RFP_PT_ENTRY_BYTES),
++                    "capacity,block_width,associativity,bank,throughput,latency (ISCA'22 PT storage)");
++  ADD_XML_CORE_STAT(out, header, core_id, "read_accesses", POWER_RFP_PT_READ, );
++  ADD_XML_CORE_STAT(out, header, core_id, "write_accesses", POWER_RFP_PT_WRITE, );
++  END_OF_COMPONENT(out, header);
++
++  ADD_XML_COMPONENT(out, header, "system.core" + std::to_string(core_id) + ".rfp_pat", "RFP_PAT", );
++  ADD_XML_PARAM_str(out, header, "rfp_config",
++                    rfp_sram_config_str(RFP_PAT_NUM_SETS, RFP_PAT_NUM_WAYS, RFP_PAT_ENTRY_BYTES),
++                    "capacity,block_width,associativity,bank,throughput,latency (ISCA'22 PAT storage)");
++  ADD_XML_CORE_STAT(out, header, core_id, "read_accesses", POWER_RFP_PAT_READ, );
++  ADD_XML_CORE_STAT(out, header, core_id, "write_accesses", POWER_RFP_PAT_WRITE, );
++  END_OF_COMPONENT(out, header);
++}
++
+ void power_print_core_params(std::ofstream& out, uint32_t core_id) {
+   uns pipeline_depth = DECODE_CYCLES + MAP_CYCLES + 1 + 1 + 1 + 1;  // icache, node, exec, retire
+ 
+@@ -588,6 +623,7 @@ void power_print_core_params(std::ofstream& out, uint32_t core_id) {
+   power_print_core_dtlb(out, core_id);
+   power_print_core_dcache(out, core_id);
+   power_print_core_btb(out, core_id);
++  power_print_core_rfp(out, core_id);
+ 
+   END_OF_COMPONENT(out, header);
+ }
+diff --git a/src/prefetcher/pref_common.c b/src/prefetcher/pref_common.c
+index 93f0793..c79d7e0 100644
+--- a/src/prefetcher/pref_common.c
++++ b/src/prefetcher/pref_common.c
+@@ -721,7 +721,7 @@ void pref_update_core(uns proc_id) {
+               umlc_req_queue[q_index].line_addr);
+ 
+       // now access the umlc
+-      Pref_Req_Info info;
++      Pref_Req_Info info = {0};
+ 
+       info.prefetcher_id = umlc_req_queue[q_index].prefetcher_id;
+       info.distance = umlc_req_queue[q_index].distance;
+@@ -773,7 +773,7 @@ void pref_update_core(uns proc_id) {
+               ul1req_queue[q_index].line_addr);
+ 
+       // now access the ul1
+-      Pref_Req_Info info;
++      Pref_Req_Info info = {0};
+ 
+       info.prefetcher_id = ul1req_queue[q_index].prefetcher_id;
+       info.distance = ul1req_queue[q_index].distance;
+diff --git a/src/stat_files.def b/src/stat_files.def
+index 5f41718..e9c9074 100644
+--- a/src/stat_files.def
++++ b/src/stat_files.def
+@@ -37,4 +37,5 @@
+ #include "prefetcher/l2l1pref.stat.def" 
+ #include "power/power.stat.def"
+ #include "prefetcher/pref.stat.def"
++#include "prefetcher/rfp.stat.def"
+ 
+diff --git a/src/thread.c b/src/thread.c
+index ef3be0d..4a36367 100644
+--- a/src/thread.c
++++ b/src/thread.c
+@@ -45,6 +45,9 @@
+ 
+ #include "ft.h"
+ #include "op_pool.h"
++#include "prefetcher/rfp.h"
++#include "prefetcher/rfp_prf.h"
++#include "statistics.h"
+ 
+ /**************************************************************************************/
+ /* Macros */
+@@ -111,6 +114,19 @@ void remove_from_seq_op_list(Thread_Data* td, Op* op) {
+ /* recover_seq_op_list: */
+ 
+ void recover_seq_op_list(Thread_Data* td, Counter op_num) {
++  /* Clear PRF state for all ops that will be squashed by this
++   * recovery, so stale prfid entries cannot be reused by younger ops. */
++  if (RFP_ON) {
++    Op** clear_op_p = (Op**)list_start_head_traversal(&td->seq_op_list);
++    for (; clear_op_p; clear_op_p = (Op**)list_next_element(&td->seq_op_list)) {
++      if ((*clear_op_p)->op_num > op_num) {
++        rfp_track_squash(*clear_op_p);
++        rfp_prf_clear_op(*clear_op_p);
++        STAT_EVENT((*clear_op_p)->proc_id, RFP_PRF_CLEARED_DUE_TO_RECOVERY);
++      }
++    }
++  }
++
+   // Traverse the sequential op list and remove everything younger than the
+   // recovering op
+   Op** op_p = (Op**)list_start_head_traversal(&td->seq_op_list);
