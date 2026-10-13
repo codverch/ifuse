@@ -1,11 +1,79 @@
-# Ideal fusion
+# Ideal fusion: an oracle bound on load µop fusion
 
-Ideal fusion is an oracle model of load µop fusion for Scarab. It fuses every
-pair of load µops that a fused load could serve correctly, so it bounds what
-any practical fusion mechanism can gain. The HPCA 2027 I-Fuse submission uses
-it as the "ideal" bar, against a no-fusion baseline, Helios [1], and RFP [2].
+This directory holds ideal fusion, an oracle model of load µop fusion for
+[Scarab](../README.md). Ideal fusion fuses every pair of load µops that one
+fused load could serve correctly, so it bounds what any practical fusion
+mechanism can gain. The I-Fuse paper (HPCA 2027 submission) uses it as the
+"ideal" bar, against a no-fusion baseline, Helios [1], and RFP [2]. See the
+[overview](#overview) below for how it works.
 
-The model needs oracle knowledge. When a load is fetched, real hardware cannot
+The code ports Scarab branch `hpca2027-ideal-fusion` at the commit the paper
+binary was built from (`740c40604`). The algorithm is unchanged, and the port
+reproduces the original's simulation stats exactly
+([validation](#validation)).
+
+## Use
+
+To build Scarab with ideal fusion, run `make` in this directory. This creates
+a patched Scarab tree in `build/scarab` and builds it. To run both passes on
+one SimPoint and see the speedup, run `scripts/run.sh`:
+
+```console
+$ make
+$ scripts/run.sh build/scarab/src/build/opt/scarab \
+    /dev/shm/ifuse/duckdb/traces_simp/trace/5.zip 30000001 60000000 /dev/shm/out
+pass 1: running in /dev/shm/out/pass1
+pass 2: running in /dev/shm/out/pass2
+pairs:   3005925
+cycles:  3549437 (pass 1, no fusion), 3312615 (pass 2, ideal fusion)
+speedup: 1.071x
+```
+
+`pass1/` and `pass2/` hold the usual Scarab stats for each pass, and
+`pairs.csv` holds the pairs pass 1 found. The fusion counters, such as
+`IDEAL_FUSION_FUSED_LOADS`, are in `ideal_fusion.stat.0.out`. Extra arguments
+to `run.sh` go to both passes, for example `--dcache_read_ports 2`. For many
+SimPoints, the paper used scarab-infra (`json/hpca2027/ideal-fusion.sh`),
+which issues the same two commands per SimPoint and adds
+`--power_intf_on 1`.
+
+To test the pass logic without traces or a Scarab build, run `make test`. To
+remove the build, run `make clean`.
+
+If you are experimenting, the fusion window is a quick knob to try. Passing
+`--ideal_fusion_distance 64` to `run.sh` fuses only pairs within 64 µops.
+
+## Setup
+
+The build needs:
+
+- This repository with its upstream Scarab history. `scripts/patch.sh` checks
+  out the Scarab commit ideal fusion was developed on (`40803f7`).
+- Network access for the Scarab submodules (DynamoRIO, XED, mbuild).
+- Scarab's usual toolchain: GCC, CMake, and Python 3.
+
+`run.sh` needs memtrace SimPoint traces. The paper used 20M instructions of
+warmup and 10M measured, so the ROI must span 30M instructions ending at the
+end of the SimPoint.
+
+A build takes about 5 minutes and about 3 GB of disk. `build/` can be a
+symlink to larger storage. To use a tree elsewhere, run
+`scripts/patch.sh <dir>` to create it and `scripts/build.sh <dir>` to build
+it.
+
+## Overview
+
+### Motivation
+
+Load µops are a large source of backend pressure. A long-latency load holds a
+ROB entry, a load queue entry, and a reservation station entry while it waits
+for memory. Fusing two loads that touch the same cache block into one µop
+frees one set of these entries and one L1-D access. Before designing a
+practical fusion mechanism, we want to know how much fusion can gain at most.
+
+### Approach
+
+The bound needs oracle knowledge. When a load is fetched, real hardware cannot
 know whether a younger load will touch the same cache block. Ideal fusion gets
 this knowledge by simulating twice. The first run finds the pairs. The second
 run fuses them.
@@ -16,50 +84,7 @@ logs the pair (100, 160). Pass 2 runs the same trace again. µop 100 performs
 one L1-D access for both loads, and µop 160 takes no ROB entry, load queue
 entry, reservation station, or execution port.
 
-This directory ports Scarab branch `hpca2027-ideal-fusion` at the commit the
-paper binary was built from (`740c40604`). The algorithm is unchanged.
-[Validation](#validation) gives the evidence.
-
-## Usage
-
-Build Scarab with ideal fusion. This needs the upstream Scarab history in
-this repository, network access for the Scarab submodules, and Scarab's usual
-toolchain.
-
-```
-ideal-fusion/scripts/build.sh /path/to/tree
-```
-
-Run both passes from separate directories, with identical trace, ROI, and
-warmup flags. These are the paper's settings:
-
-```
-cp ideal-fusion/PARAMS.in pass1/PARAMS.in
-cp ideal-fusion/PARAMS.in pass2/PARAMS.in
-FLAGS="--frontend memtrace --cbp_trace_r0 TRACE.zip \
-  --memtrace_roi_begin B --memtrace_roi_end E \
-  --full_warmup 20000000 --inst_limit 30000000 --icache_size 32768"
-
-(cd pass1 && /path/to/tree/src/scarab $FLAGS --ideal_fusion_pass 1 \
-  --ideal_fusion_log ../pairs.csv)
-(cd pass2 && /path/to/tree/src/scarab $FLAGS --ideal_fusion_pass 2 \
-  --ideal_fusion_log ../pairs.csv)
-```
-
-Pass 1 is the baseline. It changes no pipeline state. Pass 2 prints
-`Ideal fusion pass 2: loaded N candidate pair(s)` and writes the usual Scarab
-stats. The fusion counters, such as `IDEAL_FUSION_FUSED_LOADS`, are in
-`ideal_fusion.stat.0.out`. For many SimPoints, the paper used scarab-infra
-(`json/hpca2027/ideal-fusion.sh`), which issues these same commands per
-SimPoint and adds `--power_intf_on 1`.
-
-Test the pass logic without traces:
-
-```
-ideal-fusion/tests/run.sh /path/to/tree
-```
-
-## Fusible pairs
+### Fusible pairs
 
 Call the older load LOAD1 and the younger load LOAD2. The pair is fusible
 when all of the following hold. The first three are the paper's correctness
@@ -75,7 +100,7 @@ constraints.
 6. Each load joins at most one pair. A load that became a LOAD2 never
    becomes a LOAD1 later.
 
-## Passes
+### Passes
 
 Both passes number every on-path µop in fetch order. The numbers name the
 same dynamic µops in both runs, as long as the trace, ROI, and warmup match.
@@ -156,6 +181,21 @@ Changes from the Scarab branch:
   are now errors.
 
 ## Implementation
+
+The directory is laid out as follows:
+
+- [`src/ideal-fusion/`](src/ideal-fusion/): the model, copied into Scarab's
+  `src/` by `patch.sh`.
+- [`scarab.patch`](scarab.patch): hooks in shared Scarab files.
+- [`PARAMS.in`](PARAMS.in): the Golden Cove configuration the paper used.
+- [`scripts/`](scripts/): `patch.sh` and `build.sh` make a Scarab tree, and
+  `run.sh` runs both passes on one trace.
+- [`tests/`](tests/): `run.sh` drives `ideal_fusion.c` through a small
+  harness (`harness.c`) on synthetic µop streams.
+- [`Makefile`](Makefile): `make`, `make test`, and `make clean`.
+
+CI runs `make test` on every change to this directory
+([`ideal-fusion.yml`](../.github/workflows/ideal-fusion.yml)).
 
 The new sources are in `src/ideal-fusion/`.
 

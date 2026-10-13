@@ -2,8 +2,8 @@
 # Check the ideal-fusion pass logic with harness.c, without traces.
 #
 # Usage: ideal-fusion/tests/run.sh <scarab_tree> [dump_dir]
-#   scarab_tree  a tree from scripts/build.sh; supplies headers and, unless
-#                IDEAL_FUSION_C is set, src/ideal-fusion/ideal_fusion.c
+#   scarab_tree  a tree from scripts/patch.sh or build.sh. Supplies headers
+#                and, unless IDEAL_FUSION_C is set, ideal_fusion.c
 #   dump_dir     if given, also write outputs for a 50k-op random stream here.
 #                Diff two dump dirs to compare two implementations.
 #

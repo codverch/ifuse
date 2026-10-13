@@ -1,0 +1,21 @@
+name: Ideal fusion
+on:
+  push:
+    paths:
+      - 'ideal-fusion/**'
+      - '.github/workflows/ideal-fusion.yml'
+  pull_request:
+    paths:
+      - 'ideal-fusion/**'
+      - '.github/workflows/ideal-fusion.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # patch.sh checks out the upstream Scarab base commit.
+          fetch-depth: 0
+      - name: Run tests
+        run: make -C ideal-fusion test
