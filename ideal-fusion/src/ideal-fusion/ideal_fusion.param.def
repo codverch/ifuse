@@ -1,0 +1,24 @@
+/* Ideal fusion parameters. See ideal-fusion/README.md for the full contract.
+ *
+ * The first four were in general.param.def on Scarab branch
+ * hpca2027-ideal-fusion. Names and defaults are unchanged.
+ */
+
+// 0 off, 1 discover pairs (no timing effect), 2 apply logged pairs, 3 measure
+// logged pairs without fusing. All passes must use the same trace, ROI, and
+// warmup, because pairs are keyed by on-path uop number since simulation start.
+DEF_PARAM( ideal_fusion_pass            , IDEAL_FUSION_PASS         , uns    , uns       , 1        ,       )
+
+// Fusion window: LOAD2 - LOAD1 < distance, in on-path uops. Pass 1 matches
+// within it. Passes 2 and 3 drop logged pairs at or beyond it.
+DEF_PARAM( ideal_fusion_distance        , IDEAL_FUSION_DISTANCE     , uns    , uns       , 512      ,       )
+
+// Pair CSV. Written by pass 1, read by passes 2 and 3.
+DEF_PARAM( ideal_fusion_log             , IDEAL_FUSION_LOG          , char*  , string    , "ideal_fusion_candidates.csv", )
+
+// Pass 1: which earlier LOAD1 a LOAD2 pairs with when several qualify.
+// oldest-first or most-recent.
+DEF_PARAM( ideal_fusion_type            , IDEAL_FUSION_TYPE         , int    , ideal_fusion_type, 0   ,       )
+
+// Pass 3 output CSV. Was the IDEAL_FUSION_MEASURE_OUT environment variable.
+DEF_PARAM( ideal_fusion_measure_log     , IDEAL_FUSION_MEASURE_LOG  , char*  , string    , "ideal_fusion_measure.csv", )

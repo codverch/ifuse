@@ -1,3 +1,22 @@
+# I-Fuse
+
+This repository builds on Scarab. Each experiment lives in its own directory:
+
+- [ideal-fusion/](ideal-fusion/README.md): Ideal load µop fusion, the oracle
+  upper bound on fusion gains.
+
+It holds the simulator models behind "I-Fuse: Correlated Load Micro-Op
+Fusion", an HPCA 2027 submission. They were developed on branches of a
+Scarab fork and are moved here one at a time, each reviewed on its own
+before the next. Only the directories listed above are ported. I-Fuse
+itself, Helios, and RFP are not yet in this repository.
+
+Each experiment directory holds its new sources (`src/`), a patch for the
+shared Scarab files it hooks into (`scarab.patch`), the `PARAMS.in` it ran
+with, and a `scripts/build.sh` that applies both to the upstream Scarab
+commit the experiment was developed on. The top-level tree is Scarab, and
+its README follows.
+
 # Scarab Quick Start Guide
 Install:
 1. Install exact PIN version ([PIN 3.15](https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-binary-instrumentation-tool-downloads.html))

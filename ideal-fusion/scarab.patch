@@ -1,0 +1,697 @@
+diff --git a/bin/power/power_intf.pl b/bin/power/power_intf.pl
+index fd54f14..51878d0 100755
+--- a/bin/power/power_intf.pl
++++ b/bin/power/power_intf.pl
+@@ -60,7 +60,7 @@ if (!(defined $file_tag)) {
+   $file_tag = "";
+ }
+ 
+-my $model_results_filename = "$dir/$file_tag"."power_model_results.out";
++my $model_results_filename = "$dir/$file_tag"."power_model_results";
+ my $mcpat_design_filename = "$dir/$file_tag"."design.out";
+ 
+ die "PARAMS file not found: $dir/$file_tag"."PARAMS.out\n" unless -r "$dir/$file_tag"."PARAMS.out" || -r "$dir/$file_tag"."PARAMS.out.gz";
+@@ -329,9 +329,9 @@ sub get_params($@) {
+         $filter_hash{$filter} = 1;
+     }
+ 
++    my @param_files = grep { -f $_ } glob("$dir/${file_tag}PARAMS.out $dir/${file_tag}PARAMS.out.gz");
+     my $cmd = "";
+-    for my $file (`ls $dir/${file_tag}PARAMS.*{out,out.gz} 2> /dev/null`) {
+-        chomp $file;
++    for my $file (@param_files) {
+         $cmd .= ($file =~ /gz$/ ? "zcat" : "cat")." $file ; ";
+     }
+ 
+@@ -383,9 +383,10 @@ sub traverse_stats($$$$$) {
+     my $func = shift;
+     my $power_intf = shift;
+ 
+-    my @files = $power_intf ?
+-        `ls $dir/${file_tag}*.stat.*{out,out.gz} 2> /dev/null` :
+-        `ls $dir/${file_tag}*.stat.*{out,out.gz} 2> /dev/null | grep -v scarab_power`;
++    my @files = grep { -f $_ } glob("$dir/${file_tag}*.stat.*.out $dir/${file_tag}*.stat.*.out.gz");
++    if (!$power_intf) {
++        @files = grep { $_ !~ /scarab_power/ } @files;
++    }
+ 
+     for my $file (@files) {
+         chomp $file;
+diff --git a/bin/scarab_globals/scarab_paths.py b/bin/scarab_globals/scarab_paths.py
+index e059c0b..9754473 100644
+--- a/bin/scarab_globals/scarab_paths.py
++++ b/bin/scarab_globals/scarab_paths.py
+@@ -27,10 +27,12 @@ import os
+ # Modify each temporary variable below to contain the default path for each item.
+ ###################################################################################
+ __pin_dir__        = "/misc/pool1/pin/pinplay-drdebug-3.5-pin-3.5-97503-gac534ca30-gcc-linux"
+-__mcpat_bin__      = "/misc/pool1/mcpat/mcpat_v1.0/mcpat"
+-__cacti_bin__      = "/misc/pool1/mcpat/cacti65/cacti"
+ __scarab_bin_dir__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+ __scarab_sim_dir__ = os.path.dirname(__scarab_bin_dir__)
++_staged_mcpat = os.path.join(__scarab_bin_dir__, "mcpat")
++_staged_cacti = os.path.join(__scarab_bin_dir__, "cacti")
++__mcpat_bin__ = _staged_mcpat if os.path.isfile(_staged_mcpat) else "/misc/pool1/mcpat/mcpat_v1.0/mcpat"
++__cacti_bin__ = _staged_cacti if os.path.isfile(_staged_cacti) else "/misc/pool1/mcpat/cacti65/cacti"
+ 
+ ###################################################################################
+ # Public Variables: Use the values below to get the path to each item in other
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 386fdb8..929c8f0 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -66,7 +66,7 @@ add_subdirectory(ramulator)
+ add_subdirectory(pin/pin_lib)
+ add_subdirectory(pin/pin_exec/testing)
+ 
+-set(scarab_dirs bp debug bp/template_lib dvfs frontend globals isa libs memory power prefetcher confidence .)
++set(scarab_dirs bp debug bp/template_lib dvfs frontend globals ideal-fusion isa libs memory power prefetcher confidence .)
+ if(DEFINED ENV{SCARAB_ENABLE_PT_MEMTRACE})
+   set(scarab_dirs ${scarab_dirs} frontend/pt_memtrace)
+ endif()
+diff --git a/src/Makefile b/src/Makefile
+index e242b9c..7633171 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -78,7 +78,9 @@ help-nocolor: ## Print this message
+ # scarab_phony is a fake file that causes this rule to always run.
+ # We tried to make this a phony target, but it did not work. We suspect phony
+ # targets cannot be file paths.
+-$(BUILD_DIR_PREFIX)/%/scarab_phony: $(BUILD_DIR_PREFIX)/%/Makefile gitrev pin_exec
++# pin_exec is only required for the PIN exec-driven frontend. Memtrace
++# simulations, including both ideal-fusion passes, do not use it.
++$(BUILD_DIR_PREFIX)/%/scarab_phony: $(BUILD_DIR_PREFIX)/%/Makefile gitrev
+ 	@make -j --no-print-directory -C $(dir $@)
+ 	ln -sf $(dir $@)scarab scarab
+ 
+diff --git a/src/core.stat.def b/src/core.stat.def
+index 2cbb657..47f3fb3 100644
+--- a/src/core.stat.def
++++ b/src/core.stat.def
+@@ -199,6 +199,12 @@ DEF_STAT(MAP_STAGE_RENAME_VEC_REG_OFFPATH, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_RENAME_MOVE_ELIM_ONPATH, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_RENAME_MOVE_ELIM_OFFPATH, COUNT, NO_RATIO)
+ 
++DEF_STAT(REG_FILE_UTIL_SAMPLES, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_INT_PHYS_REGS_SUM, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_VEC_PHYS_REGS_SUM, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_INT_OCCUPIED_SUM, COUNT, NO_RATIO)
++DEF_STAT(REG_FILE_VEC_OCCUPIED_SUM, COUNT, NO_RATIO)
++
+ DEF_STAT(MAP_STAGE_ONPATH_INT_REG_NUM_ALLOC, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_ONPATH_VEC_REG_NUM_ALLOC, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_ONPATH_INT_REG_NUM_SHORTLIVE, COUNT, NO_RATIO)
+diff --git a/src/dcache_stage.c b/src/dcache_stage.c
+index b781631..a150f32 100644
+--- a/src/dcache_stage.c
++++ b/src/dcache_stage.c
+@@ -262,6 +262,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     else
+       STAT_EVENT(op->proc_id, POWER_DCACHE_READ_ACCESS);
+ 
++    // count every demand access issued to the L1-D (hit or miss); gate on path
++    if (!op->off_path)
++      STAT_EVENT(op->proc_id, DCACHE_ACCESS_ONPATH);
++    else
++      STAT_EVENT(op->proc_id, DCACHE_ACCESS_OFFPATH);
++
+     // if the data hits dc_pref_cache then insert to the dcache immediately
+     if (DC_PREF_CACHE_ENABLE && !line) {
+       line = dc_pref_cache_access(op);
+diff --git a/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc b/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc
+index 3d19255..eae16f4 100644
+--- a/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc
++++ b/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc
+@@ -903,7 +903,9 @@ void TraceReaderMemtrace::processDrIsaInst(InstInfo* _info, bool has_another_mem
+     ctype_inst_map.erase(mt_ref_.instr.addr);
+   }
+   auto ctype_inst_iter = ctype_inst_map.find(mt_ref_.instr.addr);
+-  if (mt_ref_.instr.encoding_is_new) {
++  // Match processInst(): encoding_is_new can be false on a PC's first Scarab visit when
++  // the reader reuses a cached encoding (e.g. after chunk boundaries in filtered traces).
++  if (mt_ref_.instr.encoding_is_new || ctype_inst_iter == ctype_inst_map.end()) {
+     assert(predecoded != nullptr);
+     ctype_pin_inst cinst = {};
+ 
+@@ -914,7 +916,6 @@ void TraceReaderMemtrace::processDrIsaInst(InstInfo* _info, bool has_another_mem
+                            std::make_tuple(cinst.num_ld + cinst.num_st, false, cinst.cf_type, false, cinst));
+     ctype_inst_iter = ctype_inst_map.find(mt_ref_.instr.addr);
+   } else {
+-    assert(ctype_inst_iter != ctype_inst_map.end());
+     std::get<MAP_XED>(ctype_inst_iter->second).encoding_is_new = mt_ref_.instr.encoding_is_new;
+   }
+ 
+@@ -1017,6 +1018,7 @@ void TraceReaderMemtrace::processInst(InstInfo* _info, [[maybe_unused]] instr_t*
+     apply_x87_bug_workaround(&cinst, xed_ins);
+     fill_in_cf_info(&cinst, xed_ins);
+     cinst.encoding_is_new = mt_ref_.instr.encoding_is_new;
++    print_err_if_invalid(&cinst, xed_ins);
+ 
+     ctype_inst_map.emplace(mt_ref_.instr.addr,
+                            std::make_tuple(n_used_mem_ops, unknown_type, cinst.cf_type != NOT_CF, is_rep, cinst));
+diff --git a/src/ft.cc b/src/ft.cc
+index 03e5b82..4edfb37 100644
+--- a/src/ft.cc
++++ b/src/ft.cc
+@@ -42,6 +42,7 @@ extern "C" {
+ #include "frontend/frontend.h"
+ }
+ #include "frontend/frontend_intf.h"
++#include "ideal-fusion/ideal_fusion.h"
+ #include "isa/isa_macros.h"
+ 
+ #include "decoupled_frontend.h"
+@@ -154,6 +155,14 @@ FT_Event FT::build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::functio
+     op->conf_off_path = conf_off_path;
+     collect_op_stats(op);
+     op->op_num = get_next_op_id_fn();
++
++    // Every fetched op starts outside ideal fusion. Pass 1 or pass 2 may assign
++    // a sequence number and classify on-path ops later.
++    op->ideal_fusion_micro_op_num = 0;
++    op->ideal_fusion_load_role = IDEAL_FUSION_NOT_CANDIDATE;
++    op->ideal_fusion_partner_micro_op_num = 0;
++    ideal_fusion_on_fetch_op(op);
++
+     op->bp_pred_main.pred_npc = op->oracle_info.npc;
+     op->bp_pred_main.pred = op->oracle_info.dir;  // for prebuilt, pred is same as dir
+     add_op(op);
+diff --git a/src/issue_queue.cc b/src/issue_queue.cc
+index 3b78e5c..70a5cc2 100644
+--- a/src/issue_queue.cc
++++ b/src/issue_queue.cc
+@@ -29,6 +29,8 @@
+ 
+ #include "issue_queue.h"
+ 
++#include "ideal-fusion/ideal_fusion.h"
++
+ extern "C" {
+ #include "globals/assert.h"
+ #include "globals/global_defs.h"
+@@ -668,6 +670,11 @@ void IssueQueues::dispatch() {
+   uns32 num_fill_rs = 0;
+ 
+   for (op = node->next_op_into_rs; op; op = op->next_node) {
++    if (ideal_fusion_load2_is_nop(op)) {
++      ASSERT(node->proc_id, op->state == OS_DONE);
++      continue;
++    }
++
+     ASSERT(proc_id, op->queue_id == MAX_UNS16 && op->queue_entry_id == MAX_UNS16);
+     uns16 queue_id = find_emptiest_queue(op);
+     if (queue_id == MAX_UNS16) {
+@@ -695,7 +702,6 @@ void IssueQueues::dispatch() {
+     }
+   }
+ 
+-  // mark the next node to continue filling in the next cycle
+   node->next_op_into_rs = op;
+ }
+ 
+diff --git a/src/map.c b/src/map.c
+index 579cda8..fe362af 100644
+--- a/src/map.c
++++ b/src/map.c
+@@ -47,6 +47,7 @@
+ #include "libs/hash_lib.h"
+ 
+ #include "cmp_model.h"
++#include "ideal-fusion/ideal_fusion.h"
+ #include "map_rename.h"
+ #include "model.h"
+ #include "op_info.h"
+@@ -555,6 +556,11 @@ void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
+   // write back the register value for the dependent ops
+   reg_file_produce(op);
+ 
++  if (type == REG_DATA_DEP) {
++    ideal_fusion_on_load1_wake(op, wake_action);
++    ideal_fusion_measure_on_wake(op);
++  }
++
+   ASSERT(op->proc_id, wake_action);
+   for (temp = op->wake_up_head; temp; temp = temp->next) {
+     Op* dep_op = temp->op;
+diff --git a/src/map_rename.c b/src/map_rename.c
+index 7781d48..2946338 100644
+--- a/src/map_rename.c
++++ b/src/map_rename.c
+@@ -29,6 +29,8 @@
+ 
+ #include "map_rename.h"
+ 
++#include "ideal-fusion/ideal_fusion.h"
++
+ #include "globals/assert.h"
+ #include "globals/global_defs.h"
+ #include "globals/global_types.h"
+@@ -482,6 +484,9 @@ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int r
+ 
+ // mark the previous entry with same archituctural id before the committed one as dead and remove it
+ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_table_num) {
++  Flag skip_src_check = ideal_fusion_load2_is_nop(op);
++
++  if (!skip_src_check) {
+   for (uns ii = 0; ii < op->inst_info->table_info.num_src_regs; ++ii) {
+     int reg_type = reg_file_get_reg_type(op->src_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+     if (reg_type == REG_FILE_REG_TYPE_OTHER)
+@@ -499,6 +504,7 @@ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_t
+       ASSERT(op->proc_id, entry != NULL && entry->onpath_consumers_num > 0);
+     }
+   }
++  }
+ 
+   for (uns ii = 0; ii < op->inst_info->table_info.num_dest_regs; ++ii) {
+     int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+@@ -514,12 +520,14 @@ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_t
+       struct reg_table *reg_table = map_data->reg_file[reg_type]->reg_table[table_type];
+       struct reg_table_entry *entry = &reg_table->entries[reg_id];
+       ASSERT(op->proc_id, entry != NULL);
+-      ASSERT(op->proc_id, entry->reg_state == REG_TABLE_ENTRY_STATE_PRODUCED || REG_RENAMING_MOVE_ELIMINATE);
++      if (entry->reg_state != REG_TABLE_ENTRY_STATE_COMMIT) {
++        ASSERT(op->proc_id, entry->reg_state == REG_TABLE_ENTRY_STATE_PRODUCED || REG_RENAMING_MOVE_ELIMINATE);
+ 
+-      // mark register as committed at retirement
+-      ASSERT(op->proc_id,
+-             reg_table->parent_reg_table->entries[entry->parent_reg_id].child_reg_id != REG_TABLE_REG_ID_INVALID);
+-      entry->reg_state = REG_TABLE_ENTRY_STATE_COMMIT;
++        // mark register as committed at retirement
++        ASSERT(op->proc_id,
++               reg_table->parent_reg_table->entries[entry->parent_reg_id].child_reg_id != REG_TABLE_REG_ID_INVALID);
++        entry->reg_state = REG_TABLE_ENTRY_STATE_COMMIT;
++      }
+ 
+       int prev_reg_id = op->prev_dst_reg_id[ii][table_type];
+       ASSERT(op->proc_id, prev_reg_id != REG_TABLE_REG_ID_INVALID);
+@@ -676,6 +684,9 @@ void reg_table_entry_read(struct reg_table_entry *entry, Op *op) {
+   if (op->off_path)
+     return;
+ 
++  if (ideal_fusion_load2_is_nop(op))
++    return;
++
+   entry->onpath_consumers_num++;
+   entry->lastuse_op_num = op->op_num;
+   entry->lastuse_committed = FALSE;
+@@ -737,6 +748,10 @@ void reg_table_entry_produce(struct reg_table_entry *entry, Op *op) {
+   if (op->move_eliminated) {
+     return;
+   }
++  if (entry->reg_state == REG_TABLE_ENTRY_STATE_PRODUCED ||
++      entry->reg_state == REG_TABLE_ENTRY_STATE_COMMIT) {
++    return;
++  }
+   ASSERT(map_data->proc_id, entry->reg_state == REG_TABLE_ENTRY_STATE_ALLOC);
+ 
+   entry->reg_state = REG_TABLE_ENTRY_STATE_PRODUCED;
+@@ -1806,6 +1821,38 @@ struct reg_renaming_scheme_func reg_renaming_scheme_func_table[REG_RENAMING_SCHE
+ };
+ // clang-format on
+ 
++/**************************************************************************************/
++/* Register-file utilization diagnostics */
++
++void reg_file_collect_utilization_stat(void) {
++  Counter total_regs[REG_FILE_REG_TYPE_NUM] = {0};
++  Counter occupied_regs[REG_FILE_REG_TYPE_NUM] = {0};
++  Flag sampled = FALSE;
++
++  for (uns reg_type = 0; reg_type < REG_FILE_REG_TYPE_NUM; ++reg_type) {
++    if (!map_data->reg_file[reg_type])
++      continue;
++
++    struct reg_table *physical_table = map_data->reg_file[reg_type]->reg_table[REG_TABLE_TYPE_PHYSICAL];
++    if (!physical_table || !physical_table->free_list)
++      continue;
++
++    ASSERT(map_data->proc_id, physical_table->size >= physical_table->free_list->reg_free_num);
++    total_regs[reg_type] = physical_table->size;
++    occupied_regs[reg_type] = physical_table->size - physical_table->free_list->reg_free_num;
++    sampled = TRUE;
++  }
++
++  if (!sampled)
++    return;
++
++  STAT_EVENT(map_data->proc_id, REG_FILE_UTIL_SAMPLES);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_VECTOR]);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
++  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_VECTOR]);
++}
++
+ /**************************************************************************************/
+ /* External Calling */
+ 
+diff --git a/src/map_rename.h b/src/map_rename.h
+index 02fc21b..504ec66 100644
+--- a/src/map_rename.h
++++ b/src/map_rename.h
+@@ -220,5 +220,6 @@ void reg_file_produce(Op *op);                // write back the dst registers
+ void reg_file_recover(Op *op);                // flush registers of misprediction operands
+ void reg_file_precommit(Op *op);              // update the register metadata when an op is non-spec
+ void reg_file_commit(Op *op);                 // release the previous register with same architectural register id
++void reg_file_collect_utilization_stat(void); // sample physical register-file occupancy once per cycle
+ 
+ #endif /* #ifndef __MAP_RENAME_H__ */
+diff --git a/src/map_stage.c b/src/map_stage.c
+index a7b5aa0..65d9e25 100644
+--- a/src/map_stage.c
++++ b/src/map_stage.c
+@@ -47,6 +47,7 @@
+ #include "bp/bp.h"
+ 
+ #include "ft.h"
++#include "ideal-fusion/ideal_fusion.h"
+ #include "map.h"
+ #include "map_rename.h"
+ #include "model.h"
+@@ -191,6 +192,8 @@ void debug_map_stage() {
+ /* map_cycle: */
+ 
+ void update_map_stage(Stage_Data* src_sd) {
++  reg_file_collect_utilization_stat();
++
+   /* stall if the renaming table is full */
+   if (!reg_file_available(STAGE_MAX_OP_COUNT)) {
+     map->reg_file_stall = TRUE;
+@@ -264,6 +267,9 @@ static inline void stage_process_op(Op* op) {
+ 
+   /* setting wake up lists */
+   add_to_wake_up_lists(op, model->wake_hook);
++
++  /* Ideal-fusion Load2 buffer coordination (after wake-up lists exist). */
++  ideal_fusion_on_map(op, model->wake_hook);
+ }
+ 
+ static inline void map_stage_collect_stat(Flag stall, Flag starved) {
+diff --git a/src/node_stage.c b/src/node_stage.c
+index 02dae09..37f9c3a 100644
+--- a/src/node_stage.c
++++ b/src/node_stage.c
+@@ -55,10 +55,12 @@
+ #include "exec_ports.h"
+ #include "ft.h"
+ #include "icache_stage.h"
++#include "ideal-fusion/ideal_fusion.h"
+ #include "issue_queue.h"
+ #include "lsq.h"
+ #include "map.h"
+ #include "map_rename.h"
++#include "model.h"
+ #include "op_pool.h"
+ #include "sim.h"
+ #include "statistics.h"
+@@ -225,7 +227,7 @@ void flush_window() {
+       DEBUG(node->proc_id, "Node window flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
+             op->off_path);
+       ASSERT(node->proc_id, op->off_path);
+-      if (!op->macro_fused)
++      if (!op->macro_fused && !ideal_fusion_load2_is_nop(op))
+         flush_ops++;
+       ASSERT(node->proc_id, op->off_path);
+       ASSERT(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num);
+@@ -242,7 +244,7 @@ void flush_window() {
+         op->recovery_scheduled = FALSE;
+       }
+       DEBUG(node->proc_id, "Node keeping  op:%s node_id:%llu\n", unsstr64(op->op_num), op->node_id);
+-      if (!op->macro_fused)
++      if (!op->macro_fused && !ideal_fusion_load2_is_nop(op))
+         keep_ops++;
+       last = &op->next_node;
+       node->node_tail = op;
+@@ -280,7 +282,7 @@ void debug_print_node_table() {
+     ASSERT(node->proc_id, temp[slot_num] == NULL);
+     temp[slot_num] = op;
+     printed_all++;
+-    if (!op->macro_fused)
++    if (!op->macro_fused && !ideal_fusion_load2_is_nop(op))
+       printed_non_fused++;
+     empty = FALSE;
+ 
+@@ -364,7 +366,10 @@ void node_fill_rob(Stage_Data* src_sd) {
+     if (!op)
+       continue;
+ 
+-    if (op->inst_info->table_info.mem_type == MEM_LD || op->inst_info->table_info.mem_type == MEM_ST) {
++    Flag ideal_fusion_skip_lsq = ideal_fusion_load2_is_nop(op);
++    if (!ideal_fusion_skip_lsq &&
++        (op->inst_info->table_info.mem_type == MEM_LD ||
++         op->inst_info->table_info.mem_type == MEM_ST)) {
+       if (!lsq_available(op->inst_info->table_info.mem_type)) {
+         DEBUG(node->proc_id, "Node fill stalled: LSQ full for op_num:%s mem_type:%s src_sd_op_count:%d node_count:%d\n",
+               unsstr64(op->op_num), op->inst_info->table_info.mem_type == MEM_LD ? "LD" : "ST", src_sd->op_count,
+@@ -406,7 +411,8 @@ void node_fill_rob(Stage_Data* src_sd) {
+ 
+     // Jump uop after CMP or TEST will be fused into one uop
+     node_fuse_op(op);
+-    if (!op->macro_fused)
++    Flag ideal_fusion_skip_count = ideal_fusion_load2_is_nop(op);
++    if (!op->macro_fused && !ideal_fusion_skip_count)
+       node->node_count++;
+ 
+     ASSERTM(node->proc_id, node->node_count <= NODE_TABLE_SIZE,
+@@ -417,7 +423,16 @@ void node_fill_rob(Stage_Data* src_sd) {
+ 
+     DEBUG(node->proc_id, "Issuing the op op_num:%s off_path:%d\n", unsstr64(op->op_num), op->off_path);
+ 
+-    op->state = OS_IN_ROB;
++    if (ideal_fusion_load2_is_nop(op)) {
++      STAT_EVENT(op->proc_id, IDEAL_FUSION_LOAD2_BYPASSED);
++      op->state = OS_DONE;
++      op->precommitted = TRUE;
++      op->precommit_cycle = cycle_count;
++      op->done_cycle = cycle_count;
++      op->dcache_cycle = cycle_count;
++    } else {
++      op->state = OS_IN_ROB;
++    }
+ 
+     /* always stop issuing after a synchronizing op */
+     if (op->inst_info->table_info.bar_type & BAR_ISSUE)
+@@ -541,8 +556,25 @@ void node_retire() {
+     if (op->inst_info->table_info.mem_type == MEM_LD && (op->done_cycle - op->sched_cycle) < 5) {
+       STAT_EVENT(op->proc_id, LD_EXEC_CYCLES_0 + (op->done_cycle - op->sched_cycle));
+     }
+-    if (op->inst_info->table_info.mem_type == MEM_LD) {
++    // Count real loads plus converted LOAD2 ops (ideal fusion), which retire
++    // as nops but still represent a load we want to account for.
++    if (op->inst_info->table_info.mem_type == MEM_LD || op->ideal_fusion_load_role == IDEAL_FUSION_LOAD2) {
+       STAT_EVENT(op->proc_id, LD_NO_DEPENDENTS + (op->wake_up_head ? 1 : 0));
++
++      // Total on-path memory loads (retire guarantees on-path); includes the
++      // converted LOAD2 ops since they are still real program loads.
++      STAT_EVENT(op->proc_id, ONPATH_MEM_LOADS);
++
++      // Fused-load accounting: each retired LOAD2 is one fused load; count both
++      // members of the pair (LOAD1 + LOAD2) toward loads participating in fusion.
++      if (op->ideal_fusion_load_role == IDEAL_FUSION_LOAD2) {
++        STAT_EVENT(op->proc_id, IDEAL_FUSION_FUSED_LOADS);
++        INC_STAT_EVENT(op->proc_id, IDEAL_FUSION_LOADS_PARTICIPATED, 2);
++      }
++
++      // Accumulate on-path load latency (retire guarantees on-path here).
++      INC_STAT_EVENT(op->proc_id, LD_EXEC_MINUS_FETCH_LATENCY, op->exec_cycle - op->fetch_cycle);
++      INC_STAT_EVENT(op->proc_id, LD_RETIRE_MINUS_FETCH_LATENCY, cycle_count - op->fetch_cycle);
+     }
+     STAT_EVENT(op->proc_id, RET_OP_EXEC_COUNT_0 + MIN2(32, op->exec_count));
+ 
+@@ -553,7 +585,9 @@ void node_retire() {
+ 
+     node_precommit_retire(op);
+ 
+-    if (op->inst_info->table_info.mem_type == MEM_LD || op->inst_info->table_info.mem_type == MEM_ST) {
++    if (!ideal_fusion_load2_is_nop(op) &&
++        (op->inst_info->table_info.mem_type == MEM_LD ||
++         op->inst_info->table_info.mem_type == MEM_ST)) {
+       lsq_commit(op);
+     }
+ 
+@@ -566,8 +600,8 @@ void node_retire() {
+       printf("[ft_free_op] stage=node_stage:retire op_num=%llu op=%p\n", (unsigned long long)op->op_num, (void*)op);
+       ft_free_op(op);
+     }
+-    // the fused op does not occupy the ROB entry
+-    if (!macro_fused_saved)
++    // the fused op does not occupy the ROB entry; same for ideal-fusion LOAD2
++    if (!macro_fused_saved && !ideal_fusion_load2_is_nop(op))
+       node->node_count--;
+ 
+     ASSERT(node->proc_id, node->node_count >= 0);
+@@ -624,7 +658,16 @@ Flag op_not_ready_for_retire(Op* op) {
+ Flag is_node_table_empty() {
+   if (node->node_count == 0) {
+     if (node->node_head != NULL) {
+-      ASSERT(node->proc_id, node->node_head->macro_fused);
++      Flag all_skippable = TRUE;
++      for (Op* o = node->node_head; o; o = o->next_node) {
++        if (o->macro_fused)
++          continue;
++        if (ideal_fusion_load2_is_nop(o))
++          continue;
++        all_skippable = FALSE;
++        break;
++      }
++      ASSERT(node->proc_id, all_skippable);
+       return FALSE;
+     }
+ 
+@@ -711,7 +754,8 @@ void node_precommit_update(void) {
+       return;
+ 
+     // wait until looking up the d-cache for memory operands
+-    if ((op->inst_info->table_info.mem_type == MEM_LD || op->inst_info->table_info.mem_type == MEM_ST) &&
++    if (!ideal_fusion_load2_is_nop(op) &&
++        (op->inst_info->table_info.mem_type == MEM_LD || op->inst_info->table_info.mem_type == MEM_ST) &&
+         op->dcache_cycle > cycle_count)
+       return;
+ 
+diff --git a/src/op.h b/src/op.h
+index b9c7b80..f9773e7 100644
+--- a/src/op.h
++++ b/src/op.h
+@@ -77,6 +77,13 @@ typedef struct FT FT;
+ DECLARE_ENUM(Op_State, OP_STATE_LIST, OS_);
+ // clang-format on
+ 
++// Role assigned to a load by ideal fusion pass 2.
++typedef enum Ideal_Fusion_Load_Role_enum {
++  IDEAL_FUSION_NOT_CANDIDATE,
++  IDEAL_FUSION_LOAD1,
++  IDEAL_FUSION_LOAD2,
++} Ideal_Fusion_Load_Role;
++
+ /**************************************************************************************/
+ 
+ typedef struct Wake_Up_Entry_struct {
+@@ -239,6 +246,13 @@ struct Op_struct {
+   uns16 dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];       // the reg id of allocated reg file entries
+   uns16 prev_dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];  // the previous dst reg id with the same parent register id
+   // }}}
++
++  // Ideal-fusion metadata. Pass 1 assigns sequence numbers for logging.
++  // Pass 2 uses the sequence number to identify precomputed LOAD1/LOAD2 pairs.
++  Counter ideal_fusion_micro_op_num;
++  Ideal_Fusion_Load_Role ideal_fusion_load_role;
++  Counter ideal_fusion_partner_micro_op_num;
++
+   FT* parent_FT;
+   FT* parent_FT_off_path;
+ };
+diff --git a/src/param_files.def b/src/param_files.def
+index 7f2533b..3f183d2 100644
+--- a/src/param_files.def
++++ b/src/param_files.def
+@@ -45,3 +45,4 @@
+ #include "prefetcher/pref_phase.param.def"
+ #include "prefetcher/pref_2dc.param.def"
+ #include "prefetcher/pref_markov.param.def"
++#include "ideal-fusion/ideal_fusion.param.def"
+diff --git a/src/param_parser.c b/src/param_parser.c
+index f3dd6af..a4fdfc3 100644
+--- a/src/param_parser.c
++++ b/src/param_parser.c
+@@ -55,6 +55,7 @@ the program.  This way, an exact duplicate run can be performed.
+ #include "bp/bp.h"
+ #include "frontend/frontend_intf.h"
+ 
++#include "ideal-fusion/ideal_fusion.h"
+ #include "model.h"
+ #include "sim.h"
+ #include "stat_trace.h"
+@@ -86,6 +87,7 @@ const char* sim_mode_names[] = {"uop", "full"
+ #endif
+ };
+ const char* exit_cond_names[] = {"last_done", "first_done"};
++const char* ideal_fusion_type_names[] = {"oldest-first", "most-recent"};
+ /* get_params() builds a heap-allocated merged argv (PARAMS.in + command line)
+  * and returns a pointer into it. To avoid leaks, we track the base pointer
+  * so main can free it via free_params_arg_list(). */
+@@ -326,6 +328,24 @@ void get_exit_cond_param(const char* name, Generic_Enum* variable) {
+     FATAL_ERROR(0, "Parameter '%s' missing value --- Ignored.\n", name);
+ }
+ 
++/**************************************************************************************/
++/* get_ideal_fusion_type: match input string to internal enum
++ */
++
++void get_ideal_fusion_type_param(const char* name, Generic_Enum* variable) {
++  if (optarg) {
++    uns ii;
++
++    for (ii = 0; ii < NUM_IDEAL_FUSION_POLICIES; ii++)
++      if (strncmp(optarg, ideal_fusion_type_names[ii], MAX_STR_LENGTH) == 0) {
++        *variable = ii;
++        return;
++      }
++    FATAL_ERROR(0, "Invalid value ('%s') for parameter '%s' --- Ignored.\n", optarg, name);
++  } else
++    FATAL_ERROR(0, "Parameter '%s' missing value --- Ignored.\n", name);
++}
++
+ /**************************************************************************************/
+ /* get_sim_model: Converts the optarg string to a number by looking it up in the
+    model_table array.  The index corresponds to the entry index, which
+diff --git a/src/param_parser.h b/src/param_parser.h
+index 1d3fb44..f0f3aac 100644
+--- a/src/param_parser.h
++++ b/src/param_parser.h
+@@ -49,6 +49,7 @@ void get_ibtb_mech_param(const char*, uns*);
+ void get_conf_mech_param(const char*, uns*);
+ void get_sim_mode_param(const char*, Generic_Enum*);
+ void get_exit_cond_param(const char*, Generic_Enum*);
++void get_ideal_fusion_type_param(const char*, Generic_Enum*);
+ void get_sim_model_param(const char*, uns*);
+ void get_frontend_param(const char*, uns*);
+ // void get_dram_sched_param(const char *, uns *); // Ramulator_remove
+diff --git a/src/pin/pin_exec/makefile b/src/pin/pin_exec/makefile
+index da26698..2608a13 100644
+--- a/src/pin/pin_exec/makefile
++++ b/src/pin/pin_exec/makefile
+@@ -12,7 +12,7 @@ CONFIG_ROOT := ../Config
+ endif
+ include $(CONFIG_ROOT)/makefile.config
+ include makefile.rules
+-include $(TOOLS_ROOT)/Config/makefile.default.rules
++include $(PIN_ROOT)/source/tools/Config/makefile.default.rules
+ 
+ ##############################################################
+ #
+diff --git a/src/pin/pin_lib/x86_decoder.cc b/src/pin/pin_lib/x86_decoder.cc
+index 75dd714..31620a0 100644
+--- a/src/pin/pin_lib/x86_decoder.cc
++++ b/src/pin/pin_lib/x86_decoder.cc
+@@ -776,6 +776,10 @@ void init_pin_opcode_convert(void) {
+   iclass_to_scarab_map[XED_ICLASS_ADOX] = {OP_IADD, -1, 1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_AESENC]   = {OP_PIPELINED_MEDIUM, -1, -1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_AESENCLAST]   = {OP_PIPELINED_MEDIUM, -1, -1, NONE};
++  iclass_to_scarab_map[XED_ICLASS_SHA256MSG1]   = {OP_PIPELINED_MEDIUM, 16, -1, NONE};
++  iclass_to_scarab_map[XED_ICLASS_SHA256MSG2]   = {OP_PIPELINED_MEDIUM, 16, -1, NONE};
++  iclass_to_scarab_map[XED_ICLASS_SHA256RNDS2]  = {OP_PIPELINED_MEDIUM, 16, -1, NONE};
++  iclass_to_scarab_map[XED_ICLASS_REP_XSHA256]  = {OP_PIPELINED_MEDIUM, 16, -1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_AND]      = {OP_LOGIC, -1, 1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_ANDN]     = {OP_LOGIC, -1, 1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_ANDNPD]   = {OP_LOGIC, 8, -1, NONE};
+@@ -1267,6 +1271,7 @@ void init_pin_opcode_convert(void) {
+ 
+   iclass_to_scarab_map[XED_ICLASS_RDTSC]  = {OP_NOTPIPELINED_SLOW, 4, 1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_RDTSCP]  = {OP_NOTPIPELINED_SLOW, 8, 1, NONE}; // 4 bytes for time-stamp (somehow), 4 for processor id
++  iclass_to_scarab_map[XED_ICLASS_RDPID]  = {OP_NOTPIPELINED_SLOW, 4, 1, NONE};
+   iclass_to_scarab_map[XED_ICLASS_RDPKRU] = {OP_MOV, 1, 2, NONE};
+   // INS_Opcode() never returns REPEAT variants of the iclasses
+   iclass_to_scarab_map[XED_ICLASS_REPE_CMPSB]  = {OP_ICMP, 1, 1, NONE};
+diff --git a/src/stat_files.def b/src/stat_files.def
+index 5f41718..fa0a3cb 100644
+--- a/src/stat_files.def
++++ b/src/stat_files.def
+@@ -33,8 +33,8 @@
+ #include "memory/memory.stat.def"
+ #include "core.stat.def"
+ #include "inst.stat.def"
++#include "ideal-fusion/ideal_fusion.stat.def"
+ #include "prefetcher/stream.stat.def"
+ #include "prefetcher/l2l1pref.stat.def" 
+ #include "power/power.stat.def"
+ #include "prefetcher/pref.stat.def"
+-

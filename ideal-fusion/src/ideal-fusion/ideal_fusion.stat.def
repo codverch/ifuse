@@ -1,0 +1,20 @@
+DEF_STAT(IDEAL_FUSION_LOAD1_TAGGED, COUNT, NO_RATIO)
+DEF_STAT(IDEAL_FUSION_LOAD2_TAGGED, COUNT, NO_RATIO)
+DEF_STAT(IDEAL_FUSION_LOAD2_BYPASSED, COUNT, NO_RATIO)
+
+// Retired-load fusion accounting (on-path).
+// FUSED_LOADS: number of fused LOAD2 ops that retired.
+// LOADS_PARTICIPATED: loads involved in fusion = FUSED_LOADS x 2 (LOAD1+LOAD2).
+DEF_STAT(IDEAL_FUSION_FUSED_LOADS, COUNT, NO_RATIO)
+DEF_STAT(IDEAL_FUSION_LOADS_PARTICIPATED, COUNT, NO_RATIO)
+
+// Total on-path memory loads that retired (includes converted LOAD2 ops).
+DEF_STAT(ONPATH_MEM_LOADS, COUNT, NO_RATIO)
+
+// On-path load latency accumulators (retire guarantees on-path).
+DEF_STAT(LD_EXEC_MINUS_FETCH_LATENCY, COUNT, NO_RATIO)
+DEF_STAT(LD_RETIRE_MINUS_FETCH_LATENCY, COUNT, NO_RATIO)
+
+// Demand D-cache accesses issued to the L1-D (hit or miss), split by path.
+DEF_STAT(DCACHE_ACCESS_ONPATH, DIST, NO_RATIO)
+DEF_STAT(DCACHE_ACCESS_OFFPATH, DIST, NO_RATIO)
