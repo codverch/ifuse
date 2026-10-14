@@ -45,7 +45,7 @@ typedef enum Topdown_Fe_Bubble_enum {
   TD_FE_ICACHE_MISS,         // both uop cache and icache missed (fetching from memory)
 } Topdown_Fe_Bubble;
 
-void topdown_bp_recovery(uns proc_id, Op* op);
+void topdown_bp_recovery(uns proc_id, Op* op, Flag helios_flush);
 void topdown_fetch_update(uns proc_id, Flag off_path, Flag backend_stall, int count_fetched, int on_path_fetched,
                           Topdown_Fe_Bubble fe_reason);
 void topdown_exec_update(uns proc_id, uns8 fus_busy);

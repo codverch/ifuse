@@ -555,6 +555,7 @@ class TAGE64K {
   void VerifyPredictorStates(Counter key);
   void RestoreStates(Counter key, UINT64 PC, OpType optype, Flag is_conditional, Flag dir, UINT64 target);
   void RestoreCheckpoint(Counter key);
+  bool HasCheckpoint(Counter key);
   void RestorePredictorstates(Counter key);
   void ComparePredictor(const PredictorStates& Pstate);
   void CompareCheckpoint(const Checkpoint& cp);

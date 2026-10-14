@@ -32,6 +32,7 @@
 #include "bp/bp.stat.def"
 #include "memory/memory.stat.def"
 #include "core.stat.def"
+#include "helios/helios.stat.def"
 #include "inst.stat.def"
 #include "prefetcher/stream.stat.def"
 #include "prefetcher/l2l1pref.stat.def" 

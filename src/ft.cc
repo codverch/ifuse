@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <functional>
 #include <iostream>
+#include <unordered_set>
 
 #include "globals/assert.h"
 #include "globals/utils.h"
@@ -37,8 +38,11 @@
 #include "bp/bp.param.h"
 #include "memory/memory.param.h"
 
+#include "helios/heliosFusion.h"
+
 extern "C" {
 #include "bp/bp_targ_mech.h"
+#include "bp/cbp_to_scarab.h"
 #include "frontend/frontend.h"
 }
 #include "frontend/frontend_intf.h"
@@ -52,6 +56,109 @@ extern "C" {
 
 uint64_t FT_id_counter = 0;
 
+// Set of currently-live FT objects, maintained ONLY when HELIOS pipeline flushes are enabled (so the
+// baseline / flushes-off path carries zero overhead). A HELIOS mis-fusion flush is the only recovery
+// that can fully squash a nested off-path FT graph (a normal branch recovery keeps the off-path FT's
+// moved on-path prefix, which keeps that FT alive). When the whole graph is squashed, an op can be
+// left with a parent_FT / parent_FT_off_path that a sibling op's ft_free_op already deleted -- the op
+// was split out of that FT's ops vector by a later off-path split, so FT::~FT never nulled its
+// back-pointer. ft_is_live() lets ft_free_op detect and skip such dangling FT pointers instead of
+// dereferencing freed memory (use-after-free). See ft_free_op.
+static std::unordered_set<const FT*> g_helios_live_fts;
+static inline bool ft_is_live(const FT* ft) {
+  return g_helios_live_fts.count(ft) != 0;
+}
+
+// HELIOS: flush-flagged (helios_flush_pending) mem uops of the macro currently being fetched, awaiting their
+// deferred BP-state snapshot at the macro's eom uop (see the deferral comment in FT::predict_ft).
+// Single list (not per-proc): only the main BP of the single modeled core takes these snapshots.
+// Cleared on every recovery -- a recovery boundary is always macro-aligned, so a pending (youngest,
+// still-being-fetched) macro is always fully squashed and its ops are about to be freed/re-fetched.
+static std::vector<Op*> g_helios_pending_flush_snapshots;
+
+void helios_ft_clear_pending_flush_snapshots(void) {
+  g_helios_pending_flush_snapshots.clear();
+}
+
+/* HELIOS flush squash sweep.
+ *
+ * A mis-fusion flush squashes ON-PATH ops (op_num > recovery_op_num). Their teardown is distributed
+ * across the pipeline-slot recover passes (FTQ, ft_op_buffer, decode/uop-queue/idq/map latches, node
+ * window), each of which calls ft_free_op on the squashed ops it happens to hold -- and ops are only
+ * actually freed when ft_free_op runs on their FT's LAST op. An FT whose last op sits in NO recovered
+ * slot (e.g. mid-construction FTs hit by the flush, or FTs whose tail ops were consumed into
+ * structures that recover by trimming rather than freeing) leaks wholesale: its squashed ops stay
+ * op_pool_valid with stale state/queue_entry_id and live wake-up-list entries. A surviving producer
+ * (the KEPT mis-fused load re-executing after the flush) then wakes such a zombie into a freed/
+ * reallocated issue-queue entry (issue_queue.cc wakeup assert; adjacent macros can share unique_num --
+ * it only advances at icache serve -- so the wake-list unique_num staleness guard cannot catch a
+ * still-alive zombie).
+ *
+ * Fix: after all recover passes, sweep every live FT (registry maintained when flushes are on) whose
+ * trailing op is squashed and drive the EXISTING ft_free_op teardown on its last op -- this reuses the
+ * mid-FT kept-prefix trim, the off-path-sibling delete, and the symmetric-ownership logic unchanged.
+ * This is ONLY correct for a helios flush: its continuation is re-fetched from the memtrace replay
+ * ring as brand-new ops (the stale saved_recovery_ft is discarded), so no live FT legitimately holds
+ * re-servable ops younger than the boundary. A normal branch recovery DOES re-serve such ops (from
+ * saved_recovery_ft), so the sweep must never run for it -- the caller gates on helios_flush. */
+void helios_sweep_squashed_fts(Counter recovery_op_num) {
+  ASSERT(0, bp_recovery_info->helios_flush);
+  // Snapshot: ft_free_op can delete this FT and/or sibling FTs from the registry while we sweep.
+  // (The registry stores const FT*; the sweep mutates, so cast back -- all registered FTs are
+  // non-const objects registered from FT::FT.)
+  std::vector<FT*> live;
+  live.reserve(g_helios_live_fts.size());
+  for (const FT* cft : g_helios_live_fts)
+    live.push_back(const_cast<FT*>(cft));
+  for (FT* ft : live) {
+    while (ft_is_live(ft)) {
+      std::vector<Op*>& ops = ft->ops;
+      // Drop already-freed trailing husks (an op freed via a sibling FT's teardown stays in this
+      // vector with op_pool_valid=0) so the tail check below sees a real op.
+      while (!ops.empty() && !ops.back()->op_pool_valid)
+        ops.pop_back();
+      if (ops.empty()) {
+        free_ft(ft);  // empty husk
+        break;
+      }
+      Op* last = ops.back();
+      if (!last->off_path && last->op_num <= recovery_op_num) {
+        // FT ends in a kept op; nothing younger survives in it (ops are op_num-ordered).
+        if (ft->op_pos > ops.size())
+          ft->op_pos = ops.size();
+        break;
+      }
+      if (!last->parent_FT && !last->parent_FT_off_path) {
+        // Fully detached orphan still referenced by this vector: free it directly.
+        ops.pop_back();
+        free_op(last);
+        continue;
+      }
+      if (!last->parent_FT) {
+        // Home FT already torn down; the op is held alive solely by an off-path sibling claim
+        // (ft_free_op asserts parent_FT, so resolve the claim here).
+        if (!ft_is_live(last->parent_FT_off_path)) {
+          last->parent_FT_off_path = nullptr;  // stale claim; next iteration frees it as an orphan
+          continue;
+        }
+        if (last->parent_FT_off_path == ft) {
+          free_ft(ft);  // we ARE the owning sibling; release_ops frees ops with no other live owner
+          break;
+        }
+        ops.pop_back();  // owned by a different live sibling; drop this non-owning reference
+        continue;
+      }
+      const size_t prev_n = ops.size();
+      ft_free_op(last);
+      if (ft_is_live(ft) && ft->ops.size() == prev_n && ft->ops.back() == last) {
+        // No progress: `last` is owned (claim pointers) by other FTs; drop this FT's non-owning
+        // reference and let the owners free it.
+        ft->ops.pop_back();
+      }
+    }
+  }
+}
+
 static inline const Bp_Pred_Info* ft_active_or_main_bp_pred_info(const Op* op) {
   return op->bp_pred_info ? op->bp_pred_info : &op->bp_pred_main;
 }
@@ -62,7 +169,33 @@ FT::~FT() {
 }
 
 void FT::release_ops() {
+  if (HELIOS_DO_FUSION) {
+    g_helios_live_fts.erase(this);
+    decoupled_fe_helios_ft_deleted(proc_id, this);  // null any DFE pointer to this FT
+  }
   for (auto ft_op : ops) {
+    // HELIOS flush: a squashed home FT and its extracted off_path_ft (created by extract_off_path_ft)
+    // share on-path ops -- the same Op* sits in BOTH ops vectors. A flush squashes both and they are
+    // freed via their respective last ops, which ft_free_op can process in EITHER order (pipeline-slot
+    // order, not op_num order). The baseline path below assumes the off_path_ft is always destroyed
+    // first (so parent_FT_off_path == this when set); that ordering does not hold under a flush. Use
+    // symmetric ownership: detach this FT's claim(s) and free the op only once no OTHER live FT still
+    // owns it -- the still-live sibling frees it when it is torn down. This reduces to the baseline
+    // behavior whenever there is no live cross-owner, and is gated so flushes-off stays byte-identical.
+    if (HELIOS_DO_FUSION) {
+      if (ft_op->parent_FT == this)
+        ft_op->parent_FT = nullptr;
+      if (ft_op->parent_FT_off_path == this)
+        ft_op->parent_FT_off_path = nullptr;
+      bool other_live = (ft_op->parent_FT && ft_is_live(ft_op->parent_FT)) ||
+                        (ft_op->parent_FT_off_path && ft_is_live(ft_op->parent_FT_off_path));
+      if (!other_live && ft_op->op_pool_valid) {
+        ft_op->parent_FT = nullptr;
+        ft_op->parent_FT_off_path = nullptr;
+        free_op(ft_op);
+      }
+      continue;
+    }
     if (!ft_op->parent_FT_off_path || ft_op->off_path) {
       ft_op->parent_FT = nullptr;
       free_op(ft_op);
@@ -95,6 +228,8 @@ void FT::reinit(uns _proc_id, uns _bp_id) {
   proc_id = _proc_id;
   bp_id = _bp_id;
   ft_info.dynamic_info.FT_id = FT_id_counter++;
+  if (HELIOS_DO_FUSION)
+    g_helios_live_fts.insert(this);
 }
 
 static FT* ft_free_list = nullptr;
@@ -111,6 +246,11 @@ FT* alloc_ft(uns proc_id, uns bp_id) {
 void free_ft(FT* ft) {
   ASSERT(0, ft);
   ASSERT(ft->proc_id, ft->bp_id || !ft->ops.empty());
+  if (HELIOS_DO_FUSION) {
+    // A recycled FT would make a stale pointer look live to ft_is_live().
+    delete ft;
+    return;
+  }
   ft->release_ops();
   ft->pool_next = ft_free_list;
   ft_free_list = ft;
@@ -428,6 +568,52 @@ FT_PredictResult FT::predict_ft() {
       op_select_bp_pred_info(op, BP_PRED_MAIN);
     }
     bp_btb_post_bp_predict(g_bp_data, op);  // for next BTB access
+
+    // HELIOS: Fetch hook for the main on-path stream: predict, validate, and fuse.
+    // bp_pred_info (pred_global_hist) and op_num are both valid here.
+    if (HELIOS_DO_FUSION && bp_id == MAIN_BP && !op->off_path) {
+      heliosFetchHook(op);
+      // HELIOS: a mis-fused (non-CF) load never goes through bp_predict_op, so its recovery_info
+      // is never populated and the branch predictor is never rewound for its flush. Snapshot the BP
+      // speculative state (heliosFetchHook has just set helios_flush_pending) so the exec-time flush can
+      // restore the global/target history, CRS, and the TAGE speculative history -- otherwise
+      // re-fetched younger ops predict against a doubly-advanced predictor.
+      //
+      // The snapshot is DEFERRED from the flushing uop to its macro's LAST (eom) uop: the flush keeps
+      // the flushing op's ENTIRE macro (squash boundary = helios_macro_last_op_num) and re-steers to
+      // the macro's true next PC, so the restore target is the state AFTER the whole kept macro was
+      // predicted. When the macro ends in a CF uop (e.g. the implicit stack-pop load of a `ret`), a
+      // snapshot taken at the load itself predates the kept CF's spec update and TAGE checkpoint:
+      // restoring it (a) erases the KEPT CF's TAGE checkpoint (younger key), tripping the
+      // RetireCheckpoint assert when that CF retires, and (b) loses the kept CF's history/CRS update,
+      // skewing every replayed prediction. For a macro with no CF uop the BP state does not change
+      // between the flushing uop and its eom, so deferral is behavior-identical there.
+      if (op->helios_flush_pending)
+        g_helios_pending_flush_snapshots.push_back(op);
+      if (op->eom && !g_helios_pending_flush_snapshots.empty()) {
+        // This op closes the pending ops' macro (pending ops are cleared on every recovery, so they
+        // can only belong to the macro currently being fetched).
+        ASSERT(proc_id, g_helios_pending_flush_snapshots.front()->helios_macro_last_op_num == op->op_num);
+        for (Op* mem_op : g_helios_pending_flush_snapshots) {
+          if (!mem_op->helios_flush_pending)
+            continue;  // cancelled in the allocation queue (heliosAllocQueueHook)
+          // HELIOS: stamp the flush re-steer target (read in bp.c::helios_sched_recovery) with the
+          // macro's TRUE next dynamic PC. That PC is this eom uop's npc (= the trace's
+          // instruction_next_addr); a non-eom mem uop's own npc is its macro's PC, so it must be
+          // taken here at the eom and applied to every flush-flagged uop of the macro.
+          mem_op->helios_macro_next_fetch_addr = op->oracle_info.npc;
+          mem_op->recovery_info.pred_global_hist = g_bp_data->global_hist;
+          mem_op->recovery_info.targ_hist = g_bp_data->targ_hist;
+          mem_op->recovery_info.crs_next = g_bp_data->crs.next;
+          mem_op->recovery_info.crs_tos = g_bp_data->crs.tos;
+          mem_op->recovery_info.crs_depth = g_bp_data->crs.depth;
+          if (BP_MECH == TAGE64K_BP)
+            bp_helios_take_checkpoint_TAGE64K(g_bp_data->proc_id, bp_id, mem_op);
+        }
+        g_helios_pending_flush_snapshots.clear();
+      }
+    }
+
     if (op->uop->cf_type) {
       // Per-CF prediction event: now that main's bp_pred_info is finalized for
       // op (and main's bp_data has just been spec-updated), fire alt-DFE
@@ -605,12 +791,76 @@ void assert_ft_after_recovery(uns8 proc_id, Op* op, Addr recovery_fetch_addr) {
 
 /* retire and flush, free all ops in a FT when last op is freed */
 void ft_free_op(Op* op) {
+  // HELIOS flush: a shared on-path op (present in both a home FT and its off_path_ft) can be freed
+  // when the sibling FT is torn down, yet still sit in a pipeline-stage slot whose recover pass then
+  // calls ft_free_op on it. Skip the already-freed op -- its FTs are handled by the sibling teardown.
+  // Gated on an in-progress flush recovery so the baseline path is untouched.
+  if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush && !op->op_pool_valid)
+    return;
   ASSERT(0, op->parent_FT);
+
+  // HELIOS mis-fusion flush: this is the only recovery that can fully squash a nested off-path FT
+  // graph, which can leave `op` referencing a parent_FT / parent_FT_off_path that a sibling op's
+  // ft_free_op already deleted (op was split out of that FT's ops vector by a later off-path split,
+  // so FT::~FT never nulled its back-pointer). Dereferencing get_last_op() on a freed FT is a
+  // use-after-free, so detect stale (already-freed) FT pointers via the liveness set and handle them
+  // safely. Only active under HELIOS flushes; the baseline path is untouched.
+  if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush) {
+    if (op->parent_FT_off_path && !ft_is_live(op->parent_FT_off_path))
+      op->parent_FT_off_path = nullptr;  // off-path FT already torn down; ignore the stale pointer
+    if (!ft_is_live(op->parent_FT) && !(op->parent_FT_off_path && ft_is_live(op->parent_FT_off_path))) {
+      // The op's home FT is already gone AND no live off_path_ft sibling still owns it; the op is
+      // orphaned. Free it directly instead of dereferencing the freed FT. (When a live sibling exists
+      // the op is NOT orphaned -- the sibling's last-op delete below frees it, so fall through.)
+      // op_pool_valid guards against a double free.
+      if (op->op_pool_valid) {
+        op->parent_FT = nullptr;
+        free_op(op);
+      }
+      return;
+    }
+  }
+
   if (op->parent_FT_off_path && op->parent_FT_off_path->get_last_op() == op)
     free_ft(op->parent_FT_off_path);
+  // HELIOS flush: the off_path_ft teardown above may have freed this shared op (symmetric ownership in
+  // FT::release_ops frees an op once its last live owner is gone). If so, stop -- the parent_FT branch
+  // below would dereference a freed op / a now-dangling parent_FT.
+  if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush && !op->op_pool_valid)
+    return;
   if (!op->parent_FT_off_path && op->parent_FT->get_last_op() == op) {
     FT* ft = op->parent_FT;
     std::vector<Op*>& ft_ops = ft->get_ops();
+
+    // HELIOS on-path flush: the squash boundary (recovery_op_num = the mis-fused load's macro last
+    // uop) can fall MID-FT, because a load is not a taken-branch FT boundary the way a normal
+    // branch recovery is. The squashed tail (op_num > recovery_op_num) is being freed here via the
+    // FT's last op, but the SAME FT also holds KEPT ops (op_num <= recovery_op_num) that must
+    // survive and retire normally. Deleting the whole FT would free those kept ops too (FT::~FT
+    // frees every on-path op), leaving dangling seq_op_list / backend references that the op pool
+    // later recycles into younger ops -> corruption. Trim only the squashed tail and keep the FT
+    // alive with its kept ops (mirrors the mixed on/off-path cleanup below, keyed on op_num).
+    if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush && !ft_ops.empty() &&
+        ft_ops.front()->op_num <= bp_recovery_info->recovery_op_num &&
+        ft_ops.back()->op_num > bp_recovery_info->recovery_op_num) {
+      while (!ft_ops.empty() && ft_ops.back()->op_num > bp_recovery_info->recovery_op_num) {
+        Op* tail = ft_ops.back();
+        ft_ops.pop_back();
+        // A squashed tail op may also be a divergence point that owns a (still-live) off-path FT;
+        // tear that down if tail is its last op so it is not left dangling. Then free the op once.
+        if (tail->parent_FT_off_path && ft_is_live(tail->parent_FT_off_path) &&
+            tail->parent_FT_off_path->get_last_op() == tail)
+          free_ft(tail->parent_FT_off_path);
+        if (tail->op_pool_valid) {
+          tail->parent_FT = nullptr;
+          free_op(tail);
+        }
+      }
+      ft->op_pos = 0;
+      ft->generate_ft_info();
+      ft->op_pos = ft_ops.size();
+      return;
+    }
 
     Flag has_on_path = FALSE;
     Flag has_off_path = FALSE;

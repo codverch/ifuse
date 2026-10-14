@@ -251,7 +251,7 @@ void recover_icache_stage() {
         DEBUG(ic->proc_id, "Icache flushing op_num:%llu off_path:%u\n", (unsigned long long)cur_data->ops[ii]->op_num,
               cur_data->ops[ii]->off_path);
         flushed = TRUE;
-        ASSERT(ic->proc_id, cur_data->ops[ii]->off_path);
+        ASSERT(ic->proc_id, cur_data->ops[ii]->off_path || helios_flush_squash_allowed());
         if (cur_data->ops[ii]->parent_FT)
           ft_free_op(cur_data->ops[ii]);
         cur_data->ops[ii] = NULL;

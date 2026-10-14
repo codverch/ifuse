@@ -164,6 +164,12 @@ void debug_decoupled_fe();
 void update_decoupled_fe(uns proc_id, uns bp_id);
 // Icache/Core API
 void recover_decoupled_fe(uns proc_id, uns bp_id, Cf_Type cf_type, Recovery_Info* info);
+// HELIOS flush: Free a stale saved_recovery_ft orphaned by the flush (see decoupled_frontend.cc).
+void decoupled_fe_helios_discard_stale_saved_recovery_ft(uns proc_id);
+// HELIOS: Nulls any DFE pointer (saved_recovery_ft / current_ft_to_push)
+// that referenced the deleted FT (a retire- or squash-path teardown can delete the FT a DFE still
+// points at; observed as a use-after-free).
+void decoupled_fe_helios_ft_deleted(uns proc_id, const struct FT* ft);
 FT* decoupled_fe_pop_ft();
 bool decoupled_fe_is_off_path();
 void decoupled_fe_retire(Op* op, int proc_id, uns64 inst_uid);
@@ -264,6 +270,15 @@ struct Decoupled_FE {
   // alt-iteration call sites reads more clearly than is_off_path().
   bool is_active() { return is_off_path_state(); }
   void recover(Cf_Type cf_type, Recovery_Info* info);
+  // HELIOS: null this DFE's saved_recovery_ft / current_ft_to_push when the FT object they point at is
+  // deleted by the helios teardown machinery (FT::~FT), so no stale pointer is ever dereferenced.
+  void helios_ft_deleted(const FT* ft) {
+    if (saved_recovery_ft == ft)
+      saved_recovery_ft = nullptr;
+    if (current_ft_to_push == ft)
+      current_ft_to_push = nullptr;
+  }
+  void helios_discard_stale_saved_recovery_ft();
   void update();
   FT* pop_ft();
   uns new_ftq_iter();

@@ -104,14 +104,16 @@ void op_sources_set_not_rdy(Op* op, uns bit) {
   op->srcs_not_rdy_words[wi] |= (1ULL << bi);
 }
 
-uns op_sources_add(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counter src_unique_num) {
+static inline uns op_sources_add_impl(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counter src_unique_num,
+                                      Flag allow_younger_src) {
   uns src_num;
   Src_Info* info;
 
   ASSERT(op->proc_id, op && src_op);
   ASSERT(op->proc_id, op->proc_id == src_op->proc_id);
   ASSERT(op->proc_id, type < NUM_DEP_TYPES);
-  ASSERTM(op->proc_id, src_op_num < op->op_num, "op:%s  src_op:%s\n", unsstr64(op->op_num), unsstr64(src_op_num));
+  ASSERTM(op->proc_id, allow_younger_src || src_op_num < op->op_num, "op:%s  src_op:%s\n", unsstr64(op->op_num),
+          unsstr64(src_op_num));
 
   op_sources_ensure_capacity(op, op->num_srcs + 1);
   src_num = op->num_srcs++;
@@ -129,6 +131,14 @@ uns op_sources_add(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counte
     ASSERT(op->proc_id, src_op->uop->mem_type == MEM_ST && op->uop->mem_type == MEM_LD);
   }
   return src_num;
+}
+
+uns op_sources_add(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counter src_unique_num) {
+  return op_sources_add_impl(op, type, src_op, src_op_num, src_unique_num, FALSE);
+}
+
+uns op_sources_add_fused(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counter src_unique_num) {
+  return op_sources_add_impl(op, type, src_op, src_op_num, src_unique_num, TRUE);
 }
 
 void op_sources_clear_not_rdy(Op* op, uns bit) {

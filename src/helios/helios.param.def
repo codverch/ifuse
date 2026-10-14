@@ -1,0 +1,15 @@
+/* Helios load-pair fusion parameters. See helios/README.md. */
+
+// Enable Helios.
+DEF_PARAM( helios_do_fusion             , HELIOS_DO_FUSION            , Flag   , Flag      , FALSE    ,       )
+
+// Fusion predictor confidence. A prediction needs confidence >= threshold.
+// Each UCH training of the same distance adds the increment; each address
+// misprediction subtracts the decrement. The paper uses a 2-bit counter:
+// threshold 3, increment 1, decrement 3.
+DEF_PARAM( helios_confidence_threshold  , HELIOS_CONFIDENCE_THRESHOLD , uns    , uns       , 3        ,       )
+DEF_PARAM( helios_confidence_increment  , HELIOS_CONFIDENCE_INCREMENT , uns    , uns       , 1        ,       )
+DEF_PARAM( helios_confidence_decrement  , HELIOS_CONFIDENCE_DECREMENT , uns    , uns       , 3        ,       )
+
+// Largest head-to-tail distance, in micro-ops. Paper: 64.
+DEF_PARAM( helios_fusion_window         , HELIOS_FUSION_WINDOW        , uns    , uns       , 64       ,       )

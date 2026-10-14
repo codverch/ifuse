@@ -52,6 +52,8 @@ extern "C" {
 #include "op_pool.h"
 }
 
+#include "helios/heliosFusion.h"
+
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_IDQ_STAGE, ##args)
 
 // Declared as `struct` to match the C-visible `typedef struct IDQ_Stage IDQ_Stage;`
@@ -144,7 +146,7 @@ void IDQ_Stage::recover() {
         DEBUG(proc_id, "IDQ queue flushing op_num:%llu off_path:%u\n", (unsigned long long)ops[i]->op_num,
               ops[i]->off_path);
         flushed = TRUE;
-        ASSERT(proc_id, ops[i]->off_path);
+        ASSERT(proc_id, ops[i]->off_path || helios_flush_squash_allowed());
         ASSERT(proc_id, i == wrap_around(tail - 1));
         if (ops[i]->parent_FT)
           ft_free_op(ops[i]);
@@ -176,7 +178,7 @@ void IDQ_Stage::recover() {
     if (op && FLUSH_OP(op)) {
       DEBUG(proc_id, "IDQ output flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
       flushed = TRUE;
-      ASSERT(proc_id, op->off_path);
+      ASSERT(proc_id, op->off_path || helios_flush_squash_allowed());
       ASSERT(proc_id, i == idq_sd.op_count - 1);
       if (op->parent_FT)
         ft_free_op(op);
@@ -280,6 +282,9 @@ void IDQ_Stage::process_input_stage_data(Stage_Data* consume_from_sd) {
       ASSERT(proc_id, op->fetched_from_uop_cache);
       decode_stage_process_op(op);
     }
+    /* Helios fuses in the allocation queue, which the IDQ models. */
+    if (HELIOS_DO_FUSION)
+      heliosAllocQueueHook(op);
     /* If there are still slots in the output stage data,
      * bypass the queue and go straight to the output data.
      * Otherwise, enqueue the IDQ. */

@@ -14,8 +14,14 @@
 extern "C" {
 #include "bp/bp_targ_mech.h"
 #include "bp/cbp_to_scarab.h"
+/* Flag set TRUE when the recovery being processed was routed through the on-path
+replay path (a normal recovery that landed mid-replay after a HELIOS flush). Forward
+declared here to avoid pulling the memtrace-specific header into the
+frontend-agnostic DFE */
+Flag helios_replay_recover_taken(uns proc_id);
 }
 #include "frontend/frontend_intf.h"
+#include "helios/heliosFusion.h"
 #include "isa/isa_macros.h"
 
 #include "ft.h"
@@ -85,6 +91,11 @@ void init_decoupled_fe(uns proc_id, uns bp_id, Bp_Data* bp_data) {
       per_core_dfe[proc_id][bp_id]->init(proc_id, bp_id, bp_data, DFE4_TRIGGER_POLICY, DFE4_STOP_POLICY);
       break;
   }
+
+  // HELIOS: One-time init of the fusion predictor, UCH, and tracking tables.
+  if (HELIOS_DO_FUSION && proc_id == 0 && bp_id == MAIN_BP) {
+    heliosFusionInit();
+  }
 }
 
 bool decoupled_fe_is_off_path() {
@@ -106,6 +117,50 @@ void recover_decoupled_fe(uns proc_id, uns bp_id, Cf_Type cf_type, Recovery_Info
   ASSERT(proc_id, g_dfe->get_proc_id() == proc_id);
   ASSERT(proc_id, g_dfe->get_bp_id() == bp_id);
   per_core_dfe[proc_id][bp_id]->recover(cf_type, info);
+}
+
+/**
+ * @brief
+ */
+// A stale saved_recovery_ft can survive the flush and leak its squashed ops.
+// It is left over from an earlier mid-FT branch mispredict, where FT::extract_off_path_ft stashes the
+// trailing on-path FT here. A HELIOS flush re-steers to the mis-fused load's next macro and resumes
+// on-path serving from the memtrace replay ring, so it never consumes saved_recovery_ft and all of its
+// ops are younger than the flush point (entirely squashed). Its already-fetched prefix ops were
+// dispatched to the backend and SHARED (parent_FT_off_path) with an off-path FT that the node-window
+// flush (flush_window) tears down; that teardown defers freeing the shared ops to this FT via FT::~FT's
+// symmetric ownership. If saved_recovery_ft is never torn down those shared ops are never freed -- they
+// leak as live "zombie" ops still in the issue queue's wake-up lists, and a later producer wakeup hits
+// one whose issue-queue entry the flush already freed (issue_queue.cc ALLOCATED assert).
+//
+// This MUST run AFTER the backend recovery (recover_node_stage): by then the shared ops are unlinked
+// from the node window and the off-path sibling FT has been torn down (leaving them with parent_FT ==
+// this saved FT and parent_FT_off_path == nullptr), so deleting the FT here frees exactly those orphaned
+// ops plus the never-fetched unread tail -- no live op is touched. Gated on helios_flush so flushes-off
+// and ordinary branch recoveries are byte-identical. (Deleting it earlier, before flush_window, would
+// null the shared ops' parent_FT and stop flush_window from tearing the off-path sibling down at all.)
+void Decoupled_FE::helios_discard_stale_saved_recovery_ft() {
+  if (!saved_recovery_ft || saved_recovery_ft->ops.empty())
+    return;
+  // Only discard a fully-squashed leftover continuation (front op is the smallest op_num in the FT).
+  if (saved_recovery_ft->get_ops().front()->op_num <= bp_recovery_info->recovery_op_num)
+    return;
+  delete saved_recovery_ft;
+  saved_recovery_ft = nullptr;
+}
+
+void decoupled_fe_helios_ft_deleted(uns proc_id, const FT* ft) {
+  for (uns bp_id = 0; bp_id < NUM_BPS; bp_id++) {
+    Decoupled_FE* dfe = per_core_dfe[proc_id][bp_id].get();
+    if (dfe)
+      dfe->helios_ft_deleted(ft);
+  }
+}
+
+void decoupled_fe_helios_discard_stale_saved_recovery_ft(uns proc_id) {
+  if (!(HELIOS_DO_FUSION && bp_recovery_info->helios_flush))
+    return;
+  per_core_dfe[proc_id][MAIN_BP]->helios_discard_stale_saved_recovery_ft();
 }
 
 void debug_decoupled_fe() {
@@ -279,7 +334,12 @@ void Decoupled_FE::init(uns _proc_id, uns _bp_id, Bp_Data* _bp_data, uns _dfe_tr
 }
 
 Op* Decoupled_FE::get_last_fetch_op() {
-  ASSERT(proc_id, current_ft_to_push);
+  // The FT this stale-by-design pointer referenced could have been deleted (and the pointer
+  // nulled via helios_ft_deleted) by a flush teardown; treat like the empty case (callers tolerate
+  // a nullptr alt_op).
+  if (!current_ft_to_push) {
+    return nullptr;
+  }
   // Get the address to continue before flushing the primary FTQ
   if (current_ft_to_push->ops.size())
     return current_ft_to_push->ops.back();
@@ -320,7 +380,7 @@ void Decoupled_FE::dfe_recover_op() {
               return false;
             DEBUG(proc_id, "FT recovery flushing unread op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
                   op->off_path);
-            ASSERT(proc_id, op->off_path);
+            ASSERT(proc_id, op->off_path || helios_flush_squash_allowed());
             return true;
           });
         }
@@ -419,9 +479,13 @@ void Decoupled_FE::dfe_recover_op() {
     else if (op->bp_pred_info->recovery_point == RECOVER_AT_EXEC)
       STAT_EVENT(proc_id, FTQ_RECOVER_EXEC);
 
-    uint64_t offpath_cycles = cycle_count - redirect_cycle;
-    ASSERT(proc_id, cycle_count > redirect_cycle);
-    INC_STAT_EVENT(proc_id, FTQ_OFFPATH_CYCLES, offpath_cycles);
+    // A HELIOS on-path flush has no preceding off-path redirect, so redirect_cycle is stale/0 here;
+    // skip the off-path-cycles accounting (which would otherwise add a bogus interval).
+    if (!bp_recovery_info->helios_flush) {
+      uint64_t offpath_cycles = cycle_count - redirect_cycle;
+      ASSERT(proc_id, cycle_count > redirect_cycle);
+      INC_STAT_EVENT(proc_id, FTQ_OFFPATH_CYCLES, offpath_cycles);
+    }
 
     // FIXME always fetch off path ops? should we get rid of this parameter?
     frontend_recover(proc_id, bp_id, bp_recovery_info->recovery_inst_uid);
@@ -436,10 +500,36 @@ void Decoupled_FE::recover(Cf_Type cf_type, Recovery_Info* info) {
   // For CONTINUE_ON_RECOVERY, alt continues the off-path stream main was on by
   // resuming from this address (rather than restarting at the misprediction).
   Op* alt_op = per_core_dfe[proc_id][MAIN_BP]->get_last_fetch_op();
-  bp_recover_op(bp_data, cf_type, info);
+  // HELIOS on-path flush: control flow was correct, so there is no branch-predictor / TAGE / CRS
+  // state to restore (and recovery_info is unpopulated for a non-CF op).
+  if (!bp_recovery_info->helios_flush) {
+    bp_recover_op(bp_data, cf_type, info);
+  }
   dfe_recover_op();
   switch (dfe_trigger_policy) {
     case PRIMARY_DFE:
+      // HELIOS on-path flush: dfe_recover_op() cleared the FTQ and armed the memtrace replay
+      // (ext_trace_helios_recover), so the next on-path op is the first re-fetched macro. There is no
+      // pre-staged saved_recovery_ft (no off-path redirect happened), so build the continuation FT
+      // fresh here from the (replayed) on-path stream and reuse the RECOVERING flow. Re-fetched ops
+      // resume at recovery_op_num + 1 (the macro's last uop + 1 = first squashed op).
+      // HELIOS replay branch: taken for a mis-fusion flush, and ALSO for an ordinary recovery that
+      // landed mid-replay -- a flush pre-fetched the true on-path stream past a branch, and that branch
+      // then mispredicted at execute; ext_trace_recover routed it through the replay path (and flagged
+      // helios_replay_recover_taken), so its on-path successors must be re-fetched from the ring rather
+      // than from a saved_recovery_ft that does not exist for this path. (bp_recover_op above still ran
+      // for the mid-replay case since helios_flush is FALSE -- it is a real branch misprediction.)
+      if (bp_recovery_info->helios_flush || (bp_id == MAIN_BP && helios_replay_recover_taken(proc_id))) {
+        ASSERT(proc_id, bp_id == MAIN_BP);
+        ASSERT(proc_id, !LOOKAHEAD_BUF_SIZE);  // on-path replay assumes lookahead disabled
+        // dfe_recover_op() cleared the FTQ and armed the memtrace replay (ext_trace_helios_recover),
+        // so the next on-path op is the first re-fetched macro. Resume normal on-path serving (the FT
+        // is built lazily in update()'s SERVING_ON_PATH, exactly like the baseline on-path stream);
+        // re-fetched ops resume at recovery_op_num + 1 (the macro's last uop + 1 = first squashed op).
+        set_on_path_op_num(bp_recovery_info->recovery_op_num + 1);
+        next_state = SERVING_ON_PATH;
+        break;
+      }
       if (stalled) {
         ASSERT(proc_id, FRONTEND == FE_PIN_EXEC_DRIVEN);
         stalled = false;

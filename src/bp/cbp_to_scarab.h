@@ -186,6 +186,18 @@ void bp_predictors_sync(Bp_Data* src, Bp_Data* dst);
 // alt into main's pre-spec-update state via bp_predictors_sync). Skips the
 // main-only TakeCheckpoint / SavePredictorStates branches.
 void bp_alt_spec_update_TAGE64K(uns proc_id, uns alt_bp_id, Op* trigger_op, Flag alt_dir);
+
+/**
+ * @brief Take/restore a TAGE speculative-state checkpoint for a mis-fused (non-CF) load so its
+ * exec-time pipeline flush can roll the predictor back to the load's fetch point.
+ */
+void bp_helios_take_checkpoint_TAGE64K(uns proc_id, uns bp_id, Op* op);
+void bp_helios_restore_TAGE64K(uns proc_id, uns bp_id, Recovery_Info* info);
+/* True while this mis-fused op still owns its TAGE flush checkpoint; false once an intervening
+ * recovery (the op's macro-terminal CF) has freed it -- which makes the op's own flush redundant. */
+Flag bp_helios_checkpoint_exists(uns proc_id, uns bp_id, Op* op);
+/* Free the checkpoint of a flush that was cancelled before it fired. */
+void bp_helios_drop_checkpoint_TAGE64K(uns proc_id, uns bp_id, Op* op);
 #ifdef __cplusplus
 }
 #endif

@@ -45,6 +45,7 @@
 #include "memory/memory.param.h"
 
 #include "bp/bp.h"
+#include "helios/heliosFusion.h"
 
 #include "ft.h"
 #include "map.h"
@@ -147,7 +148,7 @@ void recover_map_stage() {
           DEBUG(map->proc_id, "Map flushing op_num:%llu off_path:%u\n", (unsigned long long)cur->ops[jj]->op_num,
                 cur->ops[jj]->off_path);
           flushed = TRUE;
-          ASSERT(map->proc_id, cur->ops[jj]->off_path);
+          ASSERT(map->proc_id, cur->ops[jj]->off_path || helios_flush_squash_allowed());
           if (cur->ops[jj]->parent_FT)
             ft_free_op(cur->ops[jj]);
           cur->ops[jj] = NULL;
@@ -261,6 +262,10 @@ static inline void stage_process_op(Op* op) {
 
   /* register renaming allocation */
   reg_file_rename(op);
+
+  /* Helios: the tail renames. Its head now also waits for the tail's sources. */
+  if (HELIOS_DO_FUSION)
+    heliosRenameHook(op);
 
   /* setting wake up lists */
   add_to_wake_up_lists(op, model->wake_hook);

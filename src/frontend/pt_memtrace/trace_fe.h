@@ -58,6 +58,13 @@ Flag ext_trace_can_fetch_op(uns proc_id, uns bp_id);
 void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op);
 void ext_trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
 void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid);
+void ext_trace_helios_recover(uns proc_id, uns64 recover_inst_uid);
+
+/* HELIOS: TRUE iff the just-processed recovery (this cycle, MAIN_BP) was routed through the on-path
+replay path because it landed mid-replay (a flush had pre-fetched the true on-path stream and a
+re-fetched branch then mispredicted at execute). Decoupled_FE::recover queries this to take the
+on-path-replay branch instead of the saved_recovery_ft path. */
+Flag helios_replay_recover_taken(uns proc_id);
 void ext_trace_retire(uns proc_id, uns64 inst_uid);
 void ext_trace_init();
 void ext_trace_done(void);

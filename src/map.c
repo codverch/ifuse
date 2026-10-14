@@ -409,6 +409,48 @@ static inline void mem_map_byte_traversal_next(Mem_Map_Traversal* traversal) {
   traversal->byte++;
 }
 
+/**
+ * @brief Remove squashed ON-PATH stores from the oracle memory map after a HELIOS mis-fusion flush.
+ * recover_map() only rebuilds the off-path store layer (branch recoveries never squash on-path stores),
+ * so a squashed on-path store would otherwise linger in store_mask and a re-fetched load could forward
+ * from a now-squashed younger store (map.c add_store_deps asserts src->op_num < op->op_num). Must run BEFORE
+ * recover_seq_op_list trims the list (the squashed ops are still enumerable and not yet freed).
+ */
+void helios_recover_store_hash(Counter recovery_op_num) {
+  Op** op_p = (Op**)list_start_head_traversal(&td->seq_op_list);
+  for (; op_p; op_p = (Op**)list_next_element(&td->seq_op_list)) {
+    Op* op = *op_p;
+    if (op->op_num > recovery_op_num && !op->off_path && op->uop->mem_type == MEM_ST) {
+      delete_store_hash_entry(op);
+    }
+  }
+}
+
+/**
+ * @brief After a HELIOS mis-fusion flush, reset on-path register-map (and last-store-map) entries written by
+ * squashed ops (op_num > recovery_op_num) are stale and younger than the re-fetched consumers that will read them --
+ * recover_map only fixes the off-path layer (branch recoveries never squash on-path writers). Reset those entries to
+ * invalid_op (the same "no live producer" state reset_map uses): a re-fetched reader then takes add_to_wake_up_lists'
+ * retired-producer path and treats the value as ready. Entries written by kept ops (op_num <= recovery_op_num) are
+ * already correct and left untouched.
+ */
+void helios_recover_reg_map(Counter recovery_op_num) {
+  for (uns id = 0; id < NUM_REG_IDS; id++) {
+    Map_Entry* e = &map_data->reg_map[id << 1];  // on-path entry (off_path bit == 0)
+    if (e->op_num > recovery_op_num) {
+      e->op = &invalid_op;
+      e->op_num = 0;
+      e->unique_num = 0;
+    }
+  }
+  Map_Entry* ls = &map_data->last_store[0];  // on-path last store
+  if (ls->op_num > recovery_op_num) {
+    ls->op = &invalid_op;
+    ls->op_num = 0;
+    ls->unique_num = 0;
+  }
+}
+
 /**************************************************************************************/
 /* delete_store_hash_entry */
 
@@ -489,7 +531,6 @@ static inline Op* add_store_deps(Op* op) {
     STAT_EVENT(op->proc_id, LD_NO_FORWARD);
     return NULL; /* No dependency found */
   }
-
   ASSERT(op->proc_id, last_src_op->op_num < op->op_num || op->off_path);
   if (MEM_OOO_STORES) {
     /* unmark all ops we marked earlier */
@@ -663,6 +704,61 @@ void add_to_wake_up_lists(Op* op, void (*wake_action)(Op*, Op*, uns)) {
       op_sources_clear_not_rdy(op, ii);
     }
   }
+}
+
+/**************************************************************************************/
+/* helios_wire_fused_reg_src: make a fused Helios head wait for one of its tail's source producers,
+ * so the single access issues only when both loads' addresses are ready (paper Sec. IV-B2, RaW case).
+ * Mirrors the per-source body of add_to_wake_up_lists. The producer may be younger than the head (a
+ * catalyst op); checkDeadlock has ruled out a producer that depends on the head. Returns the new
+ * source bit while the head still waits on it, or MAX_UNS if it need not wait. */
+uns helios_wire_fused_reg_src(Op* consumer, Op* producer) {
+  uns ii;
+  ASSERT(map_data->proc_id, consumer && producer);
+
+  /* the head does not wait on its own register sources either */
+  if (!OBEY_REG_DEP)
+    return MAX_UNS;
+  if (!producer->op_pool_valid || producer->proc_id != consumer->proc_id)
+    return MAX_UNS;
+
+  /* SBR pairs share the base register: the head already waits on it */
+  for (ii = 0; ii < consumer->num_srcs; ii++) {
+    if (consumer->src_info[ii].type == REG_DATA_DEP && consumer->src_info[ii].op == producer &&
+        consumer->src_info[ii].unique_num == producer->unique_num)
+      return MAX_UNS;
+  }
+
+  uns bit = op_sources_add_fused(consumer, REG_DATA_DEP, producer, producer->op_num, producer->unique_num);
+  if (producer->wake_up_signaled[REG_DATA_DEP]) {
+    op_sources_clear_not_rdy(consumer, bit);
+    return MAX_UNS;
+  }
+
+  if (map_data->free_list_head == NULL) {
+    ASSERT(map_data->proc_id, map_data->active_wake_up_entries == map_data->wake_up_entries);
+    expand_wake_up_entries();
+  }
+  Wake_Up_Entry* wake = map_data->free_list_head;
+  map_data->active_wake_up_entries++;
+  map_data->free_list_head = wake->next;
+
+  wake->op = consumer;
+  wake->unique_num = consumer->unique_num;
+  wake->dep_type = REG_DATA_DEP;
+  wake->rdy_bit = bit;
+  wake->next = NULL;
+
+  if (producer->wake_up_tail == NULL) {
+    producer->wake_up_head = wake;
+    producer->wake_up_tail = wake;
+    producer->wake_up_count = 1;
+  } else {
+    producer->wake_up_tail->next = wake;
+    producer->wake_up_tail = wake;
+    producer->wake_up_count++;
+  }
+  return bit;
 }
 
 /**************************************************************************************/

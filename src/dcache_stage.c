@@ -46,6 +46,7 @@
 #include "prefetcher/pref.param.h"
 
 #include "bp/bp.h"
+#include "helios/heliosFusion.h"
 #include "prefetcher/l2l1pref.h"
 #include "prefetcher/pref_common.h"
 #include "prefetcher/stream_pref.h"
@@ -170,7 +171,7 @@ void recover_dcache_stage() {
     }
     if (op && op->op_num > bp_recovery_info->recovery_op_num) {
       DEBUG(dc->proc_id, "Dcache flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
-      ASSERT(dc->proc_id, op->off_path);
+      ASSERT(dc->proc_id, op->off_path || helios_flush_squash_allowed());
       dc->sd.ops[ii] = NULL;
       dc->sd.op_count--;
     }
@@ -261,6 +262,8 @@ void update_dcache_stage(Stage_Data* src_sd) {
       continue;
     }
 
+    /* A fused Helios tail never issues: its head's single access serves it (heliosCompleteFusedTail). */
+    ASSERT(dc->proc_id, !heliosTailFreesEntries(op));
     // OS_WAIT_MEM re-probe: the op already accessed the dcache and missed, and
     // new_mem_req found no in-flight request to merge with and no free mem-request
     // buffer. Re-looking-up the dcache can only re-derive the same known miss, so skip
@@ -331,6 +334,9 @@ void update_dcache_stage(Stage_Data* src_sd) {
         op_set_wake_cycle(op, op_get_done_cycle(op));
         wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
       }
+      // Helios: the head's single access also serves its fused tail.
+      if (HELIOS_DO_FUSION)
+        heliosCompleteFusedTail(op);
       continue;
     }
 
@@ -646,6 +652,9 @@ static inline void dcache_cacheline_hit(Op* op, Addr line_addr, Dcache_Data* lin
     op_set_wake_cycle(op, op_get_done_cycle(op));
     wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
   }
+  // Helios: the head's single access also serves its fused tail.
+  if (HELIOS_DO_FUSION)
+    heliosCompleteFusedTail(op);
 }
 
 static inline void dcache_cacheline_miss(Op* op, Addr line_addr) {
@@ -673,6 +682,8 @@ static inline void dcache_cacheline_miss(Op* op, Addr line_addr) {
         op_set_done_cycle(op, cycle_count + DCACHE_CYCLES + op->uop->extra_ld_latency);
         op_set_wake_cycle(op, cycle_count + DCACHE_CYCLES + op->uop->extra_ld_latency);
         wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
+        if (HELIOS_DO_FUSION)
+          heliosCompleteFusedTail(op);  // a forwarded head serves its tail too
         break;
       }
 
@@ -949,6 +960,9 @@ static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data
       op_set_wake_cycle(op, op_get_done_cycle(op));
       wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
     }
+    // Helios: a head that missed completes its fused tail when the fill returns.
+    if (HELIOS_DO_FUSION)
+      heliosCompleteFusedTail(op);
   }
 
   /*

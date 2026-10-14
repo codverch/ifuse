@@ -299,3 +299,46 @@ void bp_alt_spec_update_TAGE64K(uns proc_id, uns alt_bp_id, Op* trigger_op, Flag
     alt_tage->SpecUpdateAtCond(trigger_op->inst->addr, alt_dir, false);
   alt_tage->SpecUpdate(trigger_op->inst->addr, optype, alt_dir, trigger_op->oracle_info.target);
 }
+
+/**
+ * @brief Takes a checkpoint of the speculative TAGE state at the fetch of the load's macro's LAST uop.
+ * Since the flush keeps the load's entire macro, the rollback target must include a macro's ending
+ * CF uop's spec update and leave that CF's own (older-keyed) checkpoint alive for its retire.
+ */
+void bp_helios_take_checkpoint_TAGE64K(uns proc_id, uns bp_id, Op* op) {
+  if (bp_id != 0)
+    return;
+  TAGE64K* tage = cbp_predictor_TAGE64K.get_predictor(proc_id, bp_id);
+  op->recovery_info.branch_id = tage->KeyGeneration();
+  tage->SavePredictorStates(op->recovery_info.branch_id);
+  tage->TakeCheckpoint(op->recovery_info.branch_id);
+}
+
+/**
+ * @brief Roll the speculative TAGE state back to the flushing load's fetch checkpoint and free it.
+ * RestoreCheckpoint restores the speculative + predictor state to the load's snapshot AND erases all
+ * younger checkpoints (the squashed branches); RetireCheckpoint then frees the load's own entry and releases the
+ * the spot in the checkpoint table for another load to use.
+ */
+void bp_helios_restore_TAGE64K(uns proc_id, uns bp_id, Recovery_Info* info) {
+  if (bp_id != 0)
+    return;
+  TAGE64K* tage = cbp_predictor_TAGE64K.get_predictor(proc_id, bp_id);
+  tage->RestoreCheckpoint(info->branch_id);
+  tage->RetireCheckpoint(info->branch_id);
+}
+
+Flag bp_helios_checkpoint_exists(uns proc_id, uns bp_id, Op* op) {
+  if (bp_id != 0)
+    return TRUE; /* non-main predictors never take a helios checkpoint; never treat as stale */
+  TAGE64K* tage = cbp_predictor_TAGE64K.get_predictor(proc_id, bp_id);
+  return tage->HasCheckpoint(op->recovery_info.branch_id) ? TRUE : FALSE;
+}
+
+void bp_helios_drop_checkpoint_TAGE64K(uns proc_id, uns bp_id, Op* op) {
+  if (bp_id != 0)
+    return;
+  TAGE64K* tage = cbp_predictor_TAGE64K.get_predictor(proc_id, bp_id);
+  if (tage->HasCheckpoint(op->recovery_info.branch_id))
+    tage->RetireCheckpoint(op->recovery_info.branch_id);
+}

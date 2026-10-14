@@ -500,6 +500,11 @@ Counter TAGE64K::KeyGeneration() {
   return ++branch_id;
 }
 
+bool TAGE64K::HasCheckpoint(Counter key) {
+  auto& key_index = checkpoints.get<0>();
+  return key_index.find(key) != key_index.end();
+}
+
 void TAGE64K::RestorePredictorstates(Counter key) {
   auto& key_pindex = predictor_states.get<0>();
   auto pit = key_pindex.find(key);

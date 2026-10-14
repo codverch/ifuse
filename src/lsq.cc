@@ -128,9 +128,10 @@ void LSQ::recover(Counter flush_op_num) {
       break;
     }
 
-    // Free this off-path mem op from the back
+    // Free this memory operation from the back (off-path for a branch recovery, or on-path for a HELIOS
+    // mis-fusion flush, where the squashed younger ops are correct-path but still flushed).
     ASSERT(proc_id, !entries.empty());
-    ASSERT(proc_id, back_entry.op->off_path);
+    ASSERT(proc_id, back_entry.op->off_path || helios_flush_squash_allowed());
     ASSERT(proc_id, entries.back().op_num == back_entry.op->op_num);
     ASSERT(proc_id, back_entry.op->uop->mem_type == this->mem_type);
     entries.pop_back();
@@ -270,7 +271,11 @@ void recover_lsq() {
   if (!LSQ_ENABLE)
     return;
 
-  lsq_unit->recover(bp_recovery_info->recovery_op_num);
+  // For a HELIOS mis-fusion flush the recovery op is the load itself (a mem op in the LSQ);
+  // it must survive to complete its unfused access and retire, so pop only strictly-younger entries.
+  // (For a branch recovery the recovery op is not a mem op, so +0 keeps the existing behavior.)
+  Counter flush_op_num = bp_recovery_info->recovery_op_num + (bp_recovery_info->helios_flush ? 1 : 0);
+  lsq_unit->recover(flush_op_num);
 }
 
 /**************************************************************************************/

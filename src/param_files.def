@@ -29,6 +29,7 @@
 ***************************************************************************************/
 
 #include "general.param.def"
+#include "helios/helios.param.def"
 #include "memory/memory.param.def"
 #include "ramulator.param.def"
 #include "dvfs/dvfs.param.def"

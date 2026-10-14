@@ -43,6 +43,7 @@ extern "C" {
 #include "core.param.h"
 
 #include "bp/bp.h"
+#include "helios/heliosFusion.h"
 #include "memory/memory.h"
 
 #include "exec_ports.h"
@@ -880,7 +881,15 @@ void IssueQueue::issued(uns16 entry_id) {
 void IssueQueue::recover() {
   for (IssueQueueEntry& entry : entries) {
     Op* op = entry.op;
-    if (op == nullptr || !op->off_path) {
+    if (op == nullptr)
+      continue;
+
+    // A normal branch recovery squashes only off-path ops, so it frees only their RS entries. A HELIOS
+    // on-path mis-fusion flush (and any recovery after one has pre-fetched the true on-path stream)
+    // squashes ON-PATH ops too (op_num > recovery_op_num with off_path FALSE); their RS entries must be
+    // freed as well, else they leak. Over many flushes they fill the issue queues and backpressure walks
+    // its way through the pipeline.
+    if (!op->off_path && !helios_flush_squash_allowed()) {
       continue;
     }
 
@@ -1007,6 +1016,13 @@ void IssueQueues::dispatch() {
   uns32 num_fill_rs = 0;
 
   for (op = node->next_op_into_rs; op; op = op->next_node) {
+    // Helios: a fused tail takes no RS entry and never issues. Its head's single access delivers
+    // its data (heliosCompleteFusedTail).
+    if (heliosTailFreesEntries(op)) {
+      op->state = OS_SCHEDULED;
+      STAT_EVENT(op->proc_id, HELIOS_FUSED_TAIL_NOISSUE);
+      continue;
+    }
     ASSERT(proc_id, op->queue_id == MAX_UNS16 && op->queue_entry_id == MAX_UNS16);
     uns16 queue_id = find_emptiest_queue(op);
     if (queue_id == MAX_UNS16) {
@@ -1022,7 +1038,8 @@ void IssueQueues::dispatch() {
     ASSERT(node->proc_id, op->state == OS_IN_ROB);
     op->state = OS_IN_RS;
 
-    if (op_sources_not_rdy_is_clear(op)) {
+    // Helios NCS_Ready: a fused head waits in the RS until its tail renames (heliosRenameHook).
+    if (op_sources_not_rdy_is_clear(op) && !(HELIOS_DO_FUSION && op->helios_head_pending_tail)) {
       queue.wakeup(op->queue_entry_id);
       op->state = (cycle_count + 1 >= op_get_rdy_cycle(op) ? OS_READY : OS_WAIT_FWD);
     }

@@ -1,3 +1,19 @@
+# I-Fuse
+
+This repository holds the simulator models behind "I-Fuse: Correlated Load
+Micro-Op Fusion", an HPCA 2027 submission. It is a fork of [Scarab][scarab].
+Models move here from branches of an older Scarab fork one at a time, each
+reviewed on its own. So far:
+
+- [Helios](helios/README.md): non-consecutive load-pair fusion (Singh et al.,
+  MICRO 2022), the prior work the paper compares against. It is built into
+  the simulator (`src/helios/`, off by default) and runs on `src/PARAMS.in`.
+
+I-Fuse itself and the other comparison points are not ported yet. The rest of
+this tree is Scarab, and its README follows.
+
+[scarab]: https://github.com/litz-lab/scarab
+
 # Scarab Quick Start Guide
 Install:
 1. Install exact PIN version ([PIN 3.15](https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-binary-instrumentation-tool-downloads.html))

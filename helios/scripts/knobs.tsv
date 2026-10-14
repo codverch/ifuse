@@ -1,0 +1,19 @@
+# Per-application Helios confidence knobs of the HPCA 2027 paper runs.
+# Source: scarab-infra json/hpca2027/helios-tuned-{0..7}.json. Columns are the
+# --helios_* parameters:
+#   threshold  helios_confidence_threshold
+#   increment  helios_confidence_increment
+#   decrement  helios_confidence_decrement
+#   window     helios_fusion_window
+app	threshold	increment	decrement	window
+bfs	300	1	10	64
+dfs	300	1	10	64
+pagerank	300	1	10	64
+corebench	1000	1	10	64
+cachebench	1000	1	10	64
+appworld	10000	1	10	64
+terminal_bench	100	1	10	64
+clickhouse	3000	1	10	64
+duckdb	30000	1	10	64
+leveldb	30000	1	30	64
+memcached	4800	1	10	64

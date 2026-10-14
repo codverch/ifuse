@@ -69,6 +69,9 @@ typedef struct Op_Cycles_struct {
   Counter wake_cycle;       // cycle a wake up signal is sent to dependents
 } Op_Cycles;
 
+/* Tail source operands a fused Helios head may wait on (src/helios). */
+#define HELIOS_OP_MAX_TAIL_SRCS 8
+
 /* Register id slots on Op; must match REG_TABLE_REG_ID_INVALID in map_rename.h (0xFFFF). */
 #define OP_REG_ID_INVALID ((uns16)0xFFFF)
 
@@ -186,6 +189,32 @@ struct Op_struct {
   Btb_Pred_Info btb_pred;        // btb prediction info
   Bp_Pred_Info* bp_pred_info;    // selected/active branch prediction info
   Btb_Pred_Info* btb_pred_info;  // selected/active btb prediction info
+  // }}}
+
+  // {{{ Helios load-pair fusion (src/helios). Set at fetch by heliosFetchHook.
+  Flag helios_candidate;   // the fusion predictor proposed a head
+  Flag helios_local_pred;  // sub-predictor votes, kept to train the selector
+  Flag helios_global_pred;
+  uns16 helios_pred_distance;        // predicted distance to the head, in micro-ops
+  Flag helios_fused;                 // tail of a fused pair
+  Flag helios_csf;                   // fused by static consecutive fusion, not the predictor
+  Flag helios_two_lines;             // the pair spans two cache lines (two serialized accesses)
+  Flag helios_unfuse_at_rename;      // deadlock or serializing catalyst: unfused when this tail renames
+  Flag helios_addr_mispredict;       // the predicted pair does not fit one region
+  Flag helios_flush_pending;         // flush at this op's execute (address misprediction)
+  Counter helios_partner_op_num;     // on a tail: its head's op_num
+  struct Op_struct* helios_head;     // on a tail: its head
+  Flag helios_head_used;             // on a head: already paired
+  Flag helios_head_pending_tail;     // on a head: held in the RS until its tail renames (paper NCS_Ready)
+  Counter helios_group_last_op_num;  // on a head: its tail's op_num, the end of the commit group; 0 if none
+  struct Op_struct* helios_tail;     // on a head: the tail it completes
+  Counter helios_tail_unique_num;    // recycle check for helios_tail
+  Flag helios_tail_done;             // on a tail: its data has been delivered
+  uns helios_tail_src_bits[HELIOS_OP_MAX_TAIL_SRCS];  // on a head: source bits added for its tail
+  uns helios_num_tail_src_bits;
+  Counter helios_stuck_since;         // on a head: first cycle it blocked the ROB head (liveness guard)
+  Counter helios_macro_last_op_num;   // last micro-op of this op's macro: the squash boundary of a flush
+  Addr helios_macro_next_fetch_addr;  // next PC after this op's macro: the re-steer target of a flush
   // }}}
 
   int32 conf_perceptron_output;  // confidece perceptron

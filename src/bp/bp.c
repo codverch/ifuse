@@ -40,6 +40,7 @@
 
 #include "bp/bp.param.h"
 #include "core.param.h"
+#include "helios/helios.param.h"
 #include "prefetcher/pref.param.h"
 
 #include "bp//bp_conf.h"
@@ -223,6 +224,7 @@ void init_bp_recovery_info(uns8 proc_id, Bp_Recovery_Info* new_bp_recovery_info)
 
   new_bp_recovery_info->recovery_cycle = MAX_CTR;
   new_bp_recovery_info->redirect_cycle = MAX_CTR;
+  new_bp_recovery_info->helios_last_flush_inst_uid = MAX_CTR;
 
   bp_recovery_info = new_bp_recovery_info;
 
@@ -267,11 +269,135 @@ void bp_sched_recovery(Bp_Recovery_Info* bp_recovery_info, Op* op, Counter cycle
     bp_recovery_info->recovery_unique_num = op->unique_num;
     bp_recovery_info->recovery_inst_uid = op->inst_uid;
     bp_recovery_info->wpe_flag = FALSE;
+    bp_recovery_info->helios_flush = FALSE; /* this is a control-flow recovery */
     DEBUG(bp_recovery_info->proc_id,
           "Recovery scheduled op_num:%s @ 0x%s next_fetch:0x%s offpath:%d recovery_cycle:%s (now:%s)\n",
           unsstr64(op->op_num), hexstr64s(op->inst->addr), hexstr64s(next_fetch_addr), op->off_path,
           unsstr64(bp_recovery_info->recovery_cycle), unsstr64(cycle_count));
   }
+}
+
+/**
+ * @brief True when pipeline flushes are enabled. A flush re-fetches the true on-path stream (via the
+ * memtrace replay ring), so once one has fired, ANY later recovery -- including an ordinary branch
+ * mispredict resolved at execute -- can squash ON-PATH ops (the already-replayed successors of a
+ * re-fetched branch). The recovery asserts that "only off-path ops are flushed" must be relaxed
+ * accordingly when the feature is on.
+ */
+Flag helios_flush_squash_allowed(void) {
+  return HELIOS_DO_FUSION;
+}
+
+// True whenever HELIOS fusion timing is active. Head-driven completion of a non-issuing load tail
+// records the tail's source consume at a head-clocked cycle that can precede the source's produce
+// (value-correct in oracle/memtrace mode, but non-monotonic). Used to relax STAT-ONLY register
+// lifecycle collection, mirroring the flush carve-out. Keeps the no-fusion path byte-identical.
+Flag helios_fusion_timing_active(void) {
+  return HELIOS_DO_FUSION;
+}
+
+/**
+ * @brief True when a flush for THIS op's macro is already pending or was already processed. A macro
+ * can contain SEVERAL mis-fused memory micro-instructions (each flagged helios_flush_pending at fetch); every one of
+ * them targets the SAME squash boundary (the macro's last uop) and the SAME re-steer address, so the first flush
+ * already squashed and re-fetched the post-macro stream -- a sibling's flush would only re-squash the correct replayed
+ * stream. Worse, the sibling's deferred TAGE snapshot was ERASED by the first flush's restore.
+ */
+Flag helios_flush_redundant(Op* op) {
+  if (bp_recovery_info->recovery_cycle != MAX_CTR && bp_recovery_info->recovery_inst_uid == op->inst_uid) {
+    return TRUE;
+  }
+  if (bp_recovery_info->helios_last_flush_inst_uid == op->inst_uid) {
+    return TRUE;
+  }
+  /* The op's TAGE flush checkpoint is taken at its macro's eom, so it is keyed AFTER the macro's
+   * terminal CF uop. A recovery of that CF (whose RestoreCheckpoint frees every younger-keyed
+   * checkpoint) therefore frees THIS op's checkpoint -- and that CF recovery already squashed every op
+   * past the macro and re-steered to the macro's next PC, i.e. exactly this flush's squash boundary
+   * (helios_macro_last_op_num) and re-steer target (helios_macro_next_fetch_addr). So once our
+   * checkpoint is gone the flush is redundant; skipping it also avoids the RestoreCheckpoint
+   * missing-key abort. */
+  if (BP_MECH == TAGE64K_BP && !bp_helios_checkpoint_exists(op->proc_id, 0, op)) {
+    STAT_EVENT(op->proc_id, HELIOS_FLUSH_SKIPPED_STALE_CKPT);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * @brief HELIOS schedules an on-path pipeline flush for a mis-fused (non-CF) load whose fusion is invalidated at
+ * execute (address misprediction). Mirrors bp_sched_recovery's oldest-wins bookkeeping, but: (1) tags the recovery as a
+ * HELIOS flush so the recovery path relaxes its off-path asserts and skips traditional branch-predictor/TAGE/CRS
+ * restore, (2) re-steers to the macro's TRUE NEXT DYNAMIC PC (helios_macro_next_fetch_addr, stamped at uop generation
+ * from the trace) -- NOT op->oracle_info.npc, which for a non-last memory uop is the load's own macro PC, and NOT the
+ * macro fall-through, which is wrong when the mis-fused load belongs to a taken-CF macro (e.g. the implicit stack-pop
+ * load of a `ret`) -- so only ops strictly younger than the load are squashed and the load is kept (in Scarab a
+ * mis-fused load never actually fused, so it already holds the correct unfused result; keeping it also avoids re-fusion
+ * livelock), and (3) does not consume the (CF-only) branch recovery_info.
+ */
+void helios_sched_recovery(Bp_Recovery_Info* bp_recovery_info, Op* op, Counter cycle) {
+  ASSERT(op->proc_id, bp_recovery_info->proc_id == op->proc_id);
+  ASSERT(op->proc_id, !op->off_path);
+
+  if (bp_recovery_info->recovery_cycle == MAX_CTR || op->op_num <= bp_recovery_info->recovery_op_num) {
+    /* Re-steer to the macro's true next dynamic PC (stamped at uop generation from the trace's
+       instruction_next_addr). The macro fall-through (addr + inst_size) is WRONG when the mis-fused
+       load belongs to a taken-CF macro -- e.g. the implicit stack-pop load of a 1-byte `ret`, whose
+       next PC is the return target. */
+    const Addr next_fetch_addr = op->helios_macro_next_fetch_addr;
+    ASSERT(op->proc_id, next_fetch_addr);
+
+    /* The squash is uop-granular (op_num) but the re-fetch/replay is macro-granular (the frontend
+       replays whole macro-instructions), so the squash boundary must fall on a macro boundary: we
+       keep the flushing op's ENTIRE macro and squash only strictly-younger macros. The macro's last
+       uop op_num was recorded at fetch (heliosFetchHook). */
+    const Counter macro_last_op_num = op->helios_macro_last_op_num;
+    ASSERT(op->proc_id, macro_last_op_num >= op->op_num);
+
+    const uns latency = 1;
+    ASSERT(op->proc_id, !op->bp_pred_info->recovery_sch);
+    op->bp_pred_info->recovery_sch = TRUE;
+    bp_recovery_info->recovery_cycle = cycle + latency;
+    bp_recovery_info->recovery_fetch_addr = next_fetch_addr;
+    if (op->proc_id)
+      ASSERT(op->proc_id, bp_recovery_info->recovery_fetch_addr);
+
+    /* recovery_op_num is the macro's LAST uop so FLUSH_OP (op_num > recovery_op_num) keeps the whole
+       macro; recovery_inst_uid is the macro uid (shared by all its uops) so the frontend replays from
+       the NEXT macro. */
+    bp_recovery_info->recovery_op_num = macro_last_op_num;
+    bp_recovery_info->recovery_cf_type = NOT_CF;
+    bp_recovery_info->recovery_info = op->recovery_info;
+    bp_recovery_info->recovery_info.op_num = op->op_num;
+    bp_recovery_info->recovery_inst_info = op->inst;
+    bp_recovery_info->recovery_force_offpath = op->off_path;
+    bp_recovery_info->recovery_op = op;
+    bp_recovery_info->recovery_unique_num = op->unique_num;
+    bp_recovery_info->recovery_inst_uid = op->inst_uid;
+    bp_recovery_info->wpe_flag = FALSE;
+    bp_recovery_info->helios_flush = TRUE;
+    DEBUG(bp_recovery_info->proc_id,
+          "HELIOS flush scheduled op_num:%s @ 0x%s next_fetch:0x%s recovery_cycle:%s (now:%s)\n", unsstr64(op->op_num),
+          hexstr64s(op->inst->addr), hexstr64s(next_fetch_addr), unsstr64(bp_recovery_info->recovery_cycle),
+          unsstr64(cycle_count));
+  }
+}
+
+/**
+ * @brief Restore the branch-predictor speculative state to the flushing (non-CF) op's
+ * fetch snapshot after a HELIOS mis-fusion flush. Control flow is correct, so this is a pure
+ * snapshot restore -- only the CF-type-AGNOSTIC components are restored (global history, target
+ * history, CRS). The CF-type-specific structural recovers (TAGE flush, BTB/IBTB) are NOT applicable
+ * to a non-CF recovery point: bp_recover_op's TAGE path asserts on NOT_CF, and the BTB/IBTB are
+ * history-insensitive address tables. The snapshot lives in the load's recovery_info (captured in
+ * ft.cc predict_op_ft_event and copied into bp_recovery_info by helios_sched_recovery).
+ */
+void helios_bp_recover(Bp_Data* bp_data, Recovery_Info* info) {
+  bp_data->global_hist = info->pred_global_hist;
+  bp_data->targ_hist = info->targ_hist;
+  CRS_REALISTIC ? bp_crs_realistic_recover(bp_data, info) : bp_crs_recover(bp_data);
+  if (BP_MECH == TAGE64K_BP)
+    bp_helios_restore_TAGE64K(bp_data->proc_id, bp_data->bp_id, info);
 }
 
 /******************************************************************************/

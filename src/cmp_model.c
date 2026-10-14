@@ -47,6 +47,7 @@
 #include "bp/bp_targ_mech.h"
 #include "dvfs/dvfs.h"
 #include "dvfs/perf_pred.h"
+#include "helios/heliosFusion.h"
 #include "memory/cache_part.h"
 #include "prefetcher/D_JOLT.h"
 #include "prefetcher/FNL+MMA.h"
@@ -69,6 +70,10 @@
 
 /**************************************************************************************/
 /* Global vars */
+
+/* Flag set TRUE when the recovery being processed was routed through the on-path
+replay path (a normal recovery that landed mid-replay after a HELIOS flush). */
+extern Flag helios_replay_recover_taken(uns proc_id);
 
 Cmp_Model cmp_model;
 Flag perf_pred_started = FALSE;
@@ -353,7 +358,9 @@ void cmp_wake(Op* src_op, Op* dep_op, uns rdy_bit) {
 
   simple_wake(src_op, dep_op, rdy_bit);
 
-  if (op_sources_not_rdy_is_clear(dep_op) && cycle_count >= op_get_dispatch_cycle(dep_op) && !dep_op->in_rdy_list) {
+  // A fused Helios head stays in the RS until its tail renames (heliosRenameHook wakes it).
+  if (op_sources_not_rdy_is_clear(dep_op) && cycle_count >= op_get_dispatch_cycle(dep_op) && !dep_op->in_rdy_list &&
+      !(HELIOS_DO_FUSION && dep_op->helios_head_pending_tail)) {
     _DEBUG(dep_op->proc_id, DEBUG_NODE_STAGE, "Adding to ready list  op_num:%s\n", unsstr64(dep_op->op_num));
     issue_queue_wakeup(dep_op);
   }
@@ -372,6 +379,28 @@ void cmp_recover() {
   bp_recovery_info->recovery_cycle = MAX_CTR;
   bp_recovery_info->redirect_cycle = MAX_CTR;
   cmp_set_all_stages(bp_recovery_info->proc_id);
+
+  // Discard speculative fusion-tracking state for squashed ops BEFORE the frontend re-fetches.
+  // This must precede recover_decoupled_fe: for a HELIOS on-path flush the recovery FT is built
+  // eagerly there (re-running heliosFetchHook on the re-fetched ops), which would otherwise look up
+  // STALE pre-flush head entries and fuse a re-fetched tail to a now-squashed (younger) head.
+  if (HELIOS_DO_FUSION) {
+    flushTables(bp_recovery_info->recovery_op_num);
+
+    // Flush memory micro-instructions waiting in a pending queue for a snapshot of the BP checkpoint.
+    // Micro-instructions should be dropped before the frontend re-fetches. These micro-instructions stem
+    // from a macro that was mid-fetch when the flush was scheduled.
+    helios_ft_clear_pending_flush_snapshots();
+  }
+
+  // A mis-fusion flush is on-path, so bp_recover_op is skipped (its assert would fail on the NOT_CF recovery op flag).
+  // Unfortunately, the branch-predictor speculative state was advanced by the squashed ops during the first-pass fetch;
+  // We must restore it to the flushing op's fetch snapshot BEFORE the frontend re-fetches/re-predicts, else
+  // re-fetched branches mispredict (corrupted global history / CRS).
+  if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush) {
+    helios_bp_recover(g_bp_data, &bp_recovery_info->recovery_info);
+  }
+
   for (int bp_id = NUM_BPS - 1; bp_id >= 0; --bp_id) {
     cmp_set_all_data(bp_recovery_info->proc_id, bp_id);
     recover_decoupled_fe(bp_recovery_info->proc_id, bp_id, bp_recovery_info->recovery_cf_type,
@@ -379,9 +408,20 @@ void cmp_recover() {
     recover_fdip(bp_recovery_info->proc_id, bp_id);
   }
 
-  topdown_bp_recovery(bp_recovery_info->proc_id, bp_recovery_info->recovery_op);
+  topdown_bp_recovery(bp_recovery_info->proc_id, bp_recovery_info->recovery_op, bp_recovery_info->helios_flush);
 
   reg_file_recover(bp_recovery_info->recovery_op);
+
+  // A flush squashes ON-PATH ops; the oracle store map and the register/last-store maps still
+  // hold writes that were not flushed, which recover_map does not fix (it only handles
+  // the off-path layer). Repair both before recover_thread trims the seq op list. This must run for
+  // ANY recovery (not just the flush itself): once a HELIOS flush has pre-fetched the true on-path stream
+  // past a branch, that branch's ordinary mispredict recovery also squashes on-path ops.
+  if (HELIOS_DO_FUSION) {
+    helios_recover_store_hash(bp_recovery_info->recovery_op_num);
+    helios_recover_reg_map(bp_recovery_info->recovery_op_num);
+  }
+
   recover_thread(td, bp_recovery_info->recovery_fetch_addr, bp_recovery_info->recovery_op_num,
                  bp_recovery_info->recovery_inst_uid, FALSE);
 
@@ -396,6 +436,44 @@ void cmp_recover() {
   recover_dcache_stage();
   recover_memory();
   recover_node_stage();
+
+  // A NORMAL recovery routed througSo h the on-path replay (a branch mispredict resolved
+  // mid-replay; flagged by the memtrace frontend during recover_decoupled_fe above) squashes ON-PATH
+  // ops exactly like a mis-fusion flush and re-fetches its continuation from the replay ring -- never
+  // from saved_recovery_ft. Re-tag it as a flush-style squash so the stale-FT discard and the
+  // squashed-FT sweep below run for it too; otherwise the bypassed saved_recovery_ft leaks
+  // Must run AFTER the backend recovery above so its shared squashed ops are already unlinked from the node window and
+  // the off-path sibling FT is torn down -- deleting it here frees exactly those orphaned ops (otherwise they leak as
+  // zombies).
+  if (HELIOS_DO_FUSION && !bp_recovery_info->helios_flush && helios_replay_recover_taken(bp_recovery_info->proc_id)) {
+    bp_recovery_info->helios_flush = TRUE;
+  }
+
+  if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush) {
+    decoupled_fe_helios_discard_stale_saved_recovery_ft(bp_recovery_info->proc_id);
+  }
+
+  // Free squashed on-path ops that no pipeline-slot recover pass above reached
+  // (FTs whose squashed tail sat in no recovered slot leak zombies whose stale wake-up entries later
+  // fire into freed issue-queue entries). Must run AFTER all recover passes and the stale-FT discard,
+  // and ONLY for a helios flush (a normal recovery re-serves ops younger than recovery_op_num from
+  // saved_recovery_ft; the flush re-fetches them from the replay ring as new ops instead). The ops
+  // cleared in this pass were not located in any pipeline slot parsed above.
+  if (HELIOS_DO_FUSION && bp_recovery_info->helios_flush) {
+    helios_sweep_squashed_fts(bp_recovery_info->recovery_op_num);
+  }
+
+  // Remember the macro of the recovery just processed so a mis-fused memory micro-instruction of the SAME
+  // macro does not schedule a redundant flush afterwards. This covers a sibling mis-fused mem micro-instruction after
+  // the macro's first flush AND a mis-fused mem micro-instruction whose macro's own CF micro-instruction
+  // mispredicted (any recovery at this boundary re-steered the stream already and
+  // its checkpoint restore erased the sibling's younger-keyed deferred TAGE snapshot).
+  if (HELIOS_DO_FUSION)
+    bp_recovery_info->helios_last_flush_inst_uid = bp_recovery_info->recovery_inst_uid;
+
+  // This recovery is complete; clear the on-path-flush tag so it cannot be read stale data before
+  // the next recovery is scheduled.
+  bp_recovery_info->helios_flush = FALSE;
 }
 
 /**************************************************************************************/

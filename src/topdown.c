@@ -80,8 +80,9 @@ const static uns64 TOPDOWN_SCALE_FACTOR = 10000;
  * BackendStalls = CoreStalls + (∑OpsExecuted[= FEW]) + StoreStalls
  * =================================================================================== */
 
-void topdown_bp_recovery(uns proc_id, Op* op) {
-  ASSERT(op->proc_id, op->uop->cf_type);
+void topdown_bp_recovery(uns proc_id, Op* op, Flag helios_flush) {
+  // A Helios mis-fusion flush recovers on a load, which is not a CF op.
+  ASSERT(op->proc_id, op->uop->cf_type || helios_flush);
 
   // Bad-speculation breakdown inputs; the bad-spec slots themselves are counted at the fetch point
   // (topdown_fetch_update) while the frontend fetches the wrong path.

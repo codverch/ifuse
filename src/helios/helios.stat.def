@@ -1,0 +1,92 @@
+/* Helios load-pair fusion statistics. See helios/README.md.
+ *
+ * Distances are in micro-ops (tail op_num minus head op_num). A mean distance
+ * is *_DIST_SUM divided by the matching count. Predictor counters are charged
+ * to core 0 because the predictor tables are global. */
+
+// Loads seen at fetch, the denominator for coverage.
+DEF_STAT(  HELIOS_ONPATH_LOADS,                  COUNT, NO_RATIO )
+
+// Fusion predictor lookups, one per load not fused consecutively.
+DEF_STAT(  HELIOS_FP_LOOKUP_MISS,                COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_LOOKUP_LOW_CONF,            COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_LOOKUP_PREDICT,             COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_PREDICT_OUT_OF_WINDOW,      COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_SELECTOR_LOCAL_WINS,           COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_SELECTOR_GLOBAL_WINS,          COUNT, NO_RATIO )
+
+// Fusion predictor training, per table.
+DEF_STAT(  HELIOS_FP_TRAIN_SAME_DIST,            COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_TRAIN_NEW_DIST,             COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_TRAIN_ALLOC,                COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_TRAIN_EVICT_VALID,          COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FP_PENALIZE,                   COUNT, NO_RATIO )
+
+// Outcome of each prediction (paper Sec. IV-A2 conditions, Sec. IV-C repairs).
+DEF_STAT(  HELIOS_FUSION_CANDIDATES,             COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_REJECT_HEAD_NOT_FOUND,         COUNT, NO_RATIO )  // no unfused in-flight load at that distance
+DEF_STAT(  HELIOS_REJECT_HEAD_USED,              COUNT, NO_RATIO )  // the head already pairs with another load
+DEF_STAT(  HELIOS_REJECT_NEST_LIMIT,             COUNT, NO_RATIO )  // two overlapping pairs already
+DEF_STAT(  HELIOS_UNFUSE_DEADLOCK,               COUNT, NO_RATIO )  // unfused at the tail's rename
+DEF_STAT(  HELIOS_UNFUSE_SERIALIZING,            COUNT, NO_RATIO )  // unfused at the tail's rename
+DEF_STAT(  HELIOS_REJECT_ADDR_MISMATCH,          COUNT, NO_RATIO )  // flushes at the tail's execute
+DEF_STAT(  HELIOS_REJECT_HEAD_LEFT_QUEUE,        COUNT, NO_RATIO )  // head renamed before the tail reached the queue
+
+// Fused pairs, counted when the tail enters the allocation queue.
+DEF_STAT(  HELIOS_FUSIONS,                       COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FUSED_CSF,                     COUNT, NO_RATIO )  // consecutive, fused statically
+DEF_STAT(  HELIOS_FUSED_NCSF,                    COUNT, NO_RATIO )  // predicted
+DEF_STAT(  HELIOS_FUSED_DIST_SUM,                COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FUSED_CONTIGUOUS,              COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FUSED_SAME_LINE,               COUNT, NO_RATIO )  // same line, not contiguous
+DEF_STAT(  HELIOS_FUSED_TWO_LINES,               COUNT, NO_RATIO )  // spans two lines: one extra cycle
+DEF_STAT(  HELIOS_FUSED_SAME_SRC_REGS,           COUNT, NO_RATIO )  // paper SBR
+DEF_STAT(  HELIOS_FUSED_DIFF_SRC_REGS,           COUNT, NO_RATIO )  // paper DBR
+
+// The head's wait for its tail.
+DEF_STAT(  HELIOS_HEAD_HELD_FOR_TAIL,            COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TAIL_SRCS_WAITED,              COUNT, NO_RATIO )  // tail sources added to the head
+DEF_STAT(  HELIOS_TAIL_SRCS_FROM_CATALYST,       COUNT, NO_RATIO )  // of those, produced inside the catalyst
+DEF_STAT(  HELIOS_FUSED_HEAD_FORCE_RELEASED,     COUNT, NO_RATIO )  // liveness guard fired
+DEF_STAT(  HELIOS_UNFUSE_EXTRA_DISPATCH_SLOTS,   COUNT, NO_RATIO )
+
+// The tail's data.
+DEF_STAT(  HELIOS_FUSED_TAIL_NOISSUE,            COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_HEAD_DRIVEN_TAIL_COMPLETIONS,  COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TAIL_IMMEDIATE_COMPLETE,       COUNT, NO_RATIO )  // head had already returned at the tail's rename
+
+// Address mispredictions and their flushes.
+DEF_STAT(  HELIOS_FUSION_MISPREDICT,             COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FLUSHES,                       COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FLUSH_OPS_SQUASHED,            COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FLUSH_SKIPPED_STALE_CKPT,      COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_CF_RECOVERY_VIA_REPLAY,        COUNT, NO_RATIO )
+
+// Retire.
+DEF_STAT(  HELIOS_EXT_COMMIT_GROUP_STALLS,       COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_FUSIONS_COMMITTED,             COUNT, NO_RATIO )
+
+// Distance of fused pairs whose tail retired (paper Sec. V-B1 reports the mean).
+DEF_STAT(  HELIOS_COMMIT_DIST_1,                 DIST,  NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_2,                 COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_3_4,               COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_5_8,               COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_9_16,              COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_17_32,             COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_33_64,             COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_65_UP,             DIST,  NO_RATIO )
+DEF_STAT(  HELIOS_COMMIT_DIST_SUM,               COUNT, NO_RATIO )
+
+// Pairs Helios missed: an unfused load that found a same-line partner in the
+// UCH at commit, by distance and by why it did not fuse.
+DEF_STAT(  HELIOS_TRAIN_DIST_1,                  DIST,  NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_2,                  COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_3_4,                COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_5_8,                COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_9_16,               COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_17_32,              COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_33_64,              COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_65_UP,              DIST,  NO_RATIO )
+DEF_STAT(  HELIOS_TRAIN_DIST_SUM,                COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_MISSED_PAIR_NO_PREDICTION,     COUNT, NO_RATIO )
+DEF_STAT(  HELIOS_MISSED_PAIR_REJECTED,          COUNT, NO_RATIO )

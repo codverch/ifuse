@@ -65,6 +65,11 @@ typedef struct Src_Info_struct {
  * Use op_sources_add() for every oracle dependency (reg, mem addr, mem data, etc.). */
 
 uns op_sources_add(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counter src_unique_num);
+/* HELIOS only: same as op_sources_add but WITHOUT the src_op_num < op->op_num ordering assert.
+ * A fused head (NCS_Ready model) may take a tail source produced by a *younger* catalyst op; the
+ * wake-up machinery keys on unique_num, not op_num, so younger producers wake the head correctly.
+ * checkDeadlock guarantees the tail's sources never depend on the head, so no self-wait can form. */
+uns op_sources_add_fused(Op* op, Dep_Type type, Op* src_op, Counter src_op_num, Counter src_unique_num);
 void op_sources_free(Op* op);
 
 void op_sources_set_not_rdy(Op* op, uns bit);

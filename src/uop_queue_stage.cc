@@ -180,7 +180,7 @@ void recover_uop_queue_stage(void) {
       if (op && FLUSH_OP(op)) {
         DEBUG(op->proc_id, "UopQ flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
         flushed = TRUE;
-        ASSERT(op->proc_id, op->off_path);
+        ASSERT(op->proc_id, op->off_path || helios_flush_squash_allowed());
         if (op->parent_FT)
           ft_free_op(op);
         sd->ops[op_idx] = NULL;

@@ -66,6 +66,13 @@ FT_Info ft_get_ft_info(FT* ft);
 bool ft_recovery_addr_is_consecutive(FT* ft, Addr next_start);
 void assert_ft_after_recovery(uns8 proc_id, Op* op, Addr recovery_fetch_addr);
 void ft_free_op(Op* op);
+// HELIOS: drop flush-flagged mem uops awaiting their deferred BP-state snapshot (taken at their
+// macro's eom uop); called on every recovery, which always squashes the still-being-fetched macro.
+void helios_ft_clear_pending_flush_snapshots(void);
+// HELIOS: after a mis-fusion flush's recover passes, free squashed on-path ops that no pipeline-slot
+// recover pass reached, by driving ft_free_op on every live FT with a squashed tail (see ft.cc).
+// Must ONLY be called for a helios flush recovery (a normal recovery re-serves ops > recovery_op_num).
+void helios_sweep_squashed_fts(Counter recovery_op_num);
 
 #ifdef __cplusplus
 }  // extern "C"
@@ -115,6 +122,7 @@ struct FT {
   /* kept as friend so that it can access FT internals like ops and op_pos */
   friend void generate_uop_cache_data_from_FT(FT* ft, std::vector<Uop_Cache_Data>& out);
   friend void ft_free_op(Op* op);
+  friend void helios_sweep_squashed_fts(Counter recovery_op_num);
 
   // Change return type to FT_BuildResult
   FT_Event build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::function<bool(uns8, uns8, Op*)> fetch_op_fn,

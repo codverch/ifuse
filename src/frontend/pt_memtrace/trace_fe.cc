@@ -8,6 +8,7 @@
 #include <map>
 
 #include "bp/bp.param.h"
+#include "helios/helios.param.h"
 
 #include "bp/bp.h"
 #include "frontend/frontend_intf.h"
@@ -51,6 +52,89 @@ struct TraceBufState {
   std::unordered_map<Addr, Counter> buf_map = {};
 };
 static TraceBufState trace_buf_state[MAX_NUM_PROCS];
+
+/**
+ * @brief HELIOS on-path replay ring.
+ *
+ * Since the memtrace frontend is forward-only, trace_read advances the live reader and never rewinds.
+ * Branch recovery works only because off-path ops never consume the trace, so next_onpath_pi is preserved.
+ * A HELIOS mis-fusion flush instead squashes ON-PATH younger ops that WERE read from the trace,
+ * and pc_to_inst (keyed by PC, overwritten) cannot reproduce their per-instance dynamic ld/st vaddrs.
+ * So we record every macro-inst read from the live trace into a per-core ring keyed by its (monotonic) inst_uid;
+ * on a HELIOS flush we re-emit the squashed macros from the ring (from the macro AFTER the flushing op's macro) without
+ * touching the live reader, which stays parked where the flush interrupted it, then resume live reads once the replay
+ * catches up to the live head. The pending live-head macro is itself in the ring (it was pushed when read), so no
+ * separate save/restore is needed.
+ *
+ */
+#define HELIOS_REPLAY_RING_CAP 4096u
+struct HeliosReplayRing {
+  std::vector<ctype_pin_inst> buf;  // sized CAP; slot = inst_uid & (CAP-1)
+  uint64_t live_seq = 0;            // next live inst_uid to be read (one past the newest buffered)
+  uint64_t base_seq = 0;            // oldest still-resident inst_uid (= live_seq - buffered count)
+  bool replaying = false;
+  uint64_t replay_cursor = 0;  // next inst_uid trace_read will emit while replaying
+  bool initialized = false;
+};
+static HeliosReplayRing helios_replay_ring[MAX_NUM_PROCS];
+
+static inline bool helios_replay_enabled() {
+  return HELIOS_DO_FUSION;
+}
+
+// Set when ext_trace_recover routed a (non-flush) recovery through the replay path, so Decoupled_FE::
+// recover knows to take the HELIOS-style on-path-replay branch rather than the saved_recovery_ft path.
+static bool g_helios_replay_recover[MAX_NUM_PROCS];
+Flag helios_replay_recover_taken(uns proc_id) {
+  return g_helios_replay_recover[proc_id] ? TRUE : FALSE;
+}
+
+// Ring of recently-flushed macro inst_uids. A flushed macro's terminal CF can mispredict and recover
+// AFTER one or more later macros have themselves flushed, so the single helios_last_flush_inst_uid is
+// not enough to answer "was THIS macro flushed?" -- we keep a small window. Sized well above the ROB so
+// every in-flight flushed macro is still resident when its CF resolves.
+#define HELIOS_FLUSHED_UID_RING 512
+static uns64 g_flushed_uid_ring[MAX_NUM_PROCS][HELIOS_FLUSHED_UID_RING];
+static uns g_flushed_uid_head[MAX_NUM_PROCS];
+static void helios_note_flushed_macro(uns proc_id, uns64 uid) {
+  g_flushed_uid_ring[proc_id][g_flushed_uid_head[proc_id]] = uid;
+  g_flushed_uid_head[proc_id] = (g_flushed_uid_head[proc_id] + 1) % HELIOS_FLUSHED_UID_RING;
+}
+static bool helios_macro_was_flushed(uns proc_id, uns64 uid) {
+  for (uns i = 0; i < HELIOS_FLUSHED_UID_RING; i++)
+    if (g_flushed_uid_ring[proc_id][i] == uid)
+      return true;
+  return false;
+}
+
+// True when we are ACTIVELY mid-replay (a flush armed the ring and it has not drained) AND the recovery
+// point's on-path successors are still buffered -- so they must be re-fetched from the ring, not the
+// parked live reader. This is the post-flush case where a re-fetched branch mispredicts at EXECUTE
+// after its on-path successors were already replayed into the pipeline. Gating on r.replaying is
+// essential: the ring is filled by EVERY live read, so "successors buffered" alone is also true for an
+// ordinary mispredict (the frontend always runs ahead on-path), which must keep its normal
+// saved_recovery_ft path. While replaying, off-path is never live-read, so the buffered successors are
+// exactly the true on-path stream the recovery needs.
+static inline bool helios_replay_mid_recover(uns proc_id, uns64 recover_inst_uid) {
+  if (!helios_replay_enabled())
+    return false;
+  const HeliosReplayRing &r = helios_replay_ring[proc_id];
+  const uint64_t first = recover_inst_uid + 1;
+  return r.replaying && first >= r.base_seq && first < r.live_seq;
+}
+
+// Record a macro-inst just read from the live trace (live reads only -- never during replay).
+static void helios_replay_ring_push(uns proc_id, const ctype_pin_inst *pi) {
+  HeliosReplayRing &r = helios_replay_ring[proc_id];
+  if (!r.initialized) {
+    r.buf.resize(HELIOS_REPLAY_RING_CAP);
+    r.initialized = true;
+  }
+  r.buf[pi->inst_uid & (HELIOS_REPLAY_RING_CAP - 1)] = *pi;
+  r.live_seq = pi->inst_uid + 1;
+  if (r.live_seq - r.base_seq > HELIOS_REPLAY_RING_CAP)
+    r.base_seq = r.live_seq - HELIOS_REPLAY_RING_CAP;
+}
 
 const int CLINE = ~0x3F;
 
@@ -226,14 +310,34 @@ void trace_buf_init() {
 }
 
 int trace_read(int proc_id, ctype_pin_inst *next_onpath_pi) {
+  // While replaying squashed on-path macros, emit successive ring entries WITHOUT
+  // advancing the live reader (which stays parked at the live head); resume live reads once caught up.
+  if (helios_replay_enabled()) {
+    HeliosReplayRing &r = helios_replay_ring[proc_id];
+    if (r.replaying) {
+      if (r.replay_cursor < r.live_seq) {
+        *next_onpath_pi = r.buf[r.replay_cursor & (HELIOS_REPLAY_RING_CAP - 1)];
+        r.replay_cursor++;
+        return 1;
+      }
+      r.replaying = false;  // caught up to the live head
+    }
+  }
+
   if (!TRACE_BUF_SIZE) {
+    int ret = 0;
     if (FRONTEND == FE_PT)
-      return pt_trace_read(proc_id, next_onpath_pi);
+      ret = pt_trace_read(proc_id, next_onpath_pi);
     else if (FRONTEND == FE_MEMTRACE)
-      return memtrace_trace_read(proc_id, next_onpath_pi);
+      ret = memtrace_trace_read(proc_id, next_onpath_pi);
+    if (ret && helios_replay_enabled())
+      helios_replay_ring_push(proc_id, next_onpath_pi);
+    return ret;
   }
 
   ASSERT(0, TRACE_BUF_SIZE);
+  // HELIOS replay is implemented only for the unbuffered (TRACE_BUF_SIZE==0) path used by experiments.
+  ASSERT(proc_id, !helios_replay_enabled());
   TraceBufState &state = trace_buf_state[proc_id];
   *next_onpath_pi = state.circ_buf[state.rdptr];
   buf_map_remove(proc_id);
@@ -345,7 +449,77 @@ void ext_trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr)
         next_offpath_pi[proc_id][bp_id].instruction_addr);
 }
 
+/**
+ * @brief HELIOS on-path flush recovery for the memtrace frontend. Restart the on-path stream at the macro
+ * AFTER the flushing op's macro by replaying squashed macros from the ring. recover_inst_uid is the
+ * flushing op's macro uid; its whole macro is kept (squashed boundary is its last uop), and macros
+ * younger than it are re-emitted from the ring. Unlike ext_trace_recover there is no off-path stream
+ * to drop (the squashed ops are on-path), so the off_path_mode assert there does not apply.
+ */
+void ext_trace_helios_recover(uns proc_id, uns64 recover_inst_uid) {
+  ASSERT(proc_id, helios_replay_enabled());
+  ASSERT(proc_id, !TRACE_BUF_SIZE);
+  HeliosReplayRing &r = helios_replay_ring[proc_id];
+
+  // Clear any (younger) off-path speculation defensively. With --fetch_off_path_ops 0 there is none on
+  // MAIN_BP, but a flush squashes any younger off-path stream regardless.
+  for (uns bp_id = 0; bp_id < MAX_NUM_BPS; bp_id++) {
+    off_path_mode[proc_id][bp_id] = false;
+    off_path_addr[proc_id][bp_id] = 0;
+    next_offpath_pi[proc_id][bp_id] = {};
+  }
+
+  // Finish cracking the current (now-squashed) macro so the uop_generator is left at a clean macro
+  // boundary (bom), ready to crack the first replayed macro.
+  Op dummy_op;
+  dummy_op.bp_pred_l0 = {};
+  dummy_op.bp_pred_main = {};
+  dummy_op.btb_pred = {};
+  while (!uop_generator_get_eom(proc_id)) {
+    uop_generator_get_uop(proc_id, &dummy_op, &next_onpath_pi[proc_id]);
+  }
+
+  // First re-fetched macro = the one immediately after the flushing op's macro.
+  const uint64_t first = recover_inst_uid + 1;
+  ASSERT(proc_id, first >= r.base_seq);  // still resident in the ring (else CAP too small)
+  ASSERT(proc_id, first < r.live_seq);   // at least one squashed macro exists to replay
+  next_onpath_pi[proc_id] = r.buf[first & (HELIOS_REPLAY_RING_CAP - 1)];
+  r.replay_cursor = first + 1;  // trace_read emits the macro after `first` next
+  r.replaying = (r.replay_cursor < r.live_seq);
+  DEBUG(proc_id, "HELIOS recover: replay from uid:%llu (live_seq:%llu base:%llu)\n", (unsigned long long)first,
+        (unsigned long long)r.live_seq, (unsigned long long)r.base_seq);
+}
+
 void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
+  if (bp_id == 0)
+    g_helios_replay_recover[proc_id] = false;
+  // HELIOS on-path mis-fusion flush takes a dedicated replay path (the squashed ops are on-path, so
+  // the off_path_mode assertion below does not hold and the trace must be replayed, not just resumed).
+  if (bp_recovery_info->helios_flush) {
+    if (bp_id == 0)
+      helios_note_flushed_macro(proc_id, inst_uid);  // remember this macro was flushed
+    ext_trace_helios_recover(proc_id, inst_uid);
+    return;
+  }
+  // A later NORMAL recovery can also land mid-replay: a flush pre-fetches the true on-path stream past
+  // a branch, and if that branch then mispredicts at execute, its (non-HELIOS) recovery must re-fetch
+  // the already-replayed on-path successors from the ring -- the live reader is parked. Take the same
+  // replay path and flag it so Decoupled_FE::recover routes to the on-path-replay branch.
+  // A macro's terminal CF whose macro was just flushed by a mis-fusion flush recovers to the SAME target
+  // the flush already re-steered to (the macro's next PC == this eom CF's npc) and squashes the same ops.
+  // The flush re-fetched that continuation from the replay ring; meanwhile the FE may have run ahead
+  // off-path, leaving saved_recovery_ft stale for this CF. Re-fetch this CF's continuation from the ring
+  // too (its successors are still buffered), exactly like the flush -- not the stale saved_recovery_ft.
+  const Flag eom_cf_of_flushed_macro =
+      (bp_id == 0 && bp_recovery_info->recovery_op && bp_recovery_info->recovery_op->eom &&
+       helios_macro_was_flushed(proc_id, inst_uid));
+  if (bp_id == 0 && (helios_replay_mid_recover(proc_id, inst_uid) || eom_cf_of_flushed_macro)) {  // bp_id 0 == MAIN_BP
+    if (eom_cf_of_flushed_macro)
+      STAT_EVENT(proc_id, HELIOS_CF_RECOVERY_VIA_REPLAY);
+    g_helios_replay_recover[proc_id] = true;
+    ext_trace_helios_recover(proc_id, inst_uid);
+    return;
+  }
   Op dummy_op;
   dummy_op.bp_pred_l0 = {};
   dummy_op.bp_pred_main = {};
@@ -377,6 +551,9 @@ void ext_trace_init() {
     init_ctype_pin_inst(&next_onpath_pi[i]);
     for (uns j = 0; j < MAX_NUM_BPS; j++)
       init_ctype_pin_inst(&next_offpath_pi[i][j]);
+    g_flushed_uid_head[i] = 0;
+    for (uns k = 0; k < HELIOS_FLUSHED_UID_RING; k++)
+      g_flushed_uid_ring[i][k] = MAX_CTR;  // sentinel: never matches a real inst_uid
   }
 
   if (FRONTEND == FE_PT)

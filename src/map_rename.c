@@ -37,6 +37,7 @@
 
 #include "debug/debug.param.h"
 
+#include "bp/bp.h"
 #include "isa/isa.h"
 #include "isa/isa_macros.h"
 
@@ -224,9 +225,31 @@ static inline void reg_file_collect_released_entry_stat(struct reg_table_entry *
   if (entry->off_path)
     return;
 
+  // HELIOS: an on-path register squashed by a mis-fusion flush is flushed speculative work, not a
+  // normal commit-time release, so its alloc->produce->consume->release cycle ordering need not hold
+  // (e.g. it may be freed before it ever produced). Skip its lifecycle stats, mirroring the off_path
+  // skip above. Stat-only and gated on the flush, so the flushes-off path stays byte-identical.
+  if (helios_flush_squash_allowed() && bp_recovery_info->helios_flush)
+    return;
+
   // set the cycle counts for unconsumed registers
   entry->produced_cycle = entry->produced_cycle == MAX_CTR ? cycle_count : entry->produced_cycle;
   entry->onpath_consumed_cycle = entry->onpath_consumed_cycle == MAX_CTR ? cycle_count : entry->onpath_consumed_cycle;
+
+  // HELIOS: two fusion mechanisms make an entry's alloc->produce->consume cycle ordering
+  // non-monotonic, both stat-only and value-correct in memtrace mode (oracle data):
+  //  (1) a mis-fusion flush re-executes ops, so a kept producer can write back (produced_cycle)
+  //      AFTER a forwarded consumer recorded its consume (onpath_consumed_cycle); and
+  //  (2) head-driven load-tail timing: a non-issuing fused tail records its source consume at the
+  //      head's completion cycle, which can precede that source's produce.
+  // These lifecycle stats assume in-order alloc->produce->consume; skip collection for such
+  // fusion-perturbed entries instead of asserting. Gated on HELIOS fusion being active, so the
+  // no-fusion path keeps the strict invariant and stays byte-identical.
+  if (helios_fusion_timing_active() &&
+      (entry->produced_cycle < entry->allocated_cycle || entry->onpath_consumed_cycle < entry->produced_cycle ||
+       cycle_count < entry->onpath_consumed_cycle))
+    return;
+
   ASSERT(map_data->proc_id, entry->produced_cycle >= entry->allocated_cycle);
   ASSERT(map_data->proc_id, entry->onpath_consumed_cycle >= entry->produced_cycle);
   ASSERT(map_data->proc_id, cycle_count >= entry->onpath_consumed_cycle);
@@ -487,6 +510,88 @@ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int r
   }
 }
 
+// HELIOS: a mis-fusion flush recovers on a NOT_CF load and squashes ops YOUNGER than the fused macro's
+// last uop (recovery_op_num). Those ops are on-path (control flow is correct), unlike a branch
+// recovery's off-path squash, so reg_file_flush_mispredict (asserts off_path, and by :471-472 never
+// actually frees an on-path entry) cannot reclaim them; and no SRT checkpoint was taken for the NOT_CF
+// load to roll back. Repair the SRT incrementally instead, mirroring map.c's helios_recover_reg_map:
+// restore each squashed op's arch entry (child_reg_id) to the producer it displaced (prev_dst_reg_id)
+// and free its own physical entry, so the finite register file does not leak across flushes. The
+// caller walks youngest->oldest, so each arch reg's pointer ends on the youngest KEPT producer.
+// Path-agnostic: a flush that pre-fetched the true stream past a branch can leave off-path ops younger
+// than the macro too; the same restore+free reclaims them (their SRT writes are undone here in lieu of
+// rollback_srt, which is not used on this path). move_eliminated dsts (off in the live config) alias a
+// src and keep num_refs > 0 here, so the defensive "continue" skips freeing the shared entry.
+static inline void reg_file_flush_squash_helios(Op *op, int *reg_table_types, int reg_table_num) {
+  // (1) Undo the on-path source-read accounting this squashed op performed on its producers. At rename
+  // reg_table_entry_read does onpath_consumers_num++ on each src producer (on-path only, :727-730), and
+  // at execute reg_table_entry_consume does onpath_consumed_count++ (:770-773). A squashed op leaves
+  // those counts dangling on any KEPT producer, breaking the commit invariant
+  // onpath_consumed_count == onpath_consumers_num (reg_file_release_prev). Off-path reads/consumes never
+  // touch the onpath counters, so only on-path ops need this. The producer's physical reg id is recorded
+  // in op->src_reg_id[ii][PHYSICAL] at rename; producers are older than this op, so youngest->oldest
+  // traversal visits them before they are freed.
+  if (!op->off_path) {
+    Flag executed = (op_get_sched_cycle(op) != MAX_CTR);  // reg_file_consume ran (op scheduled into a FU)
+    for (uns ii = 0; ii < op->uop->num_src_regs; ++ii) {
+      int reg_type = reg_file_get_reg_type(op->src_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+      if (reg_type == REG_FILE_REG_TYPE_OTHER)
+        continue;
+
+      for (uns jj = 0; jj < reg_table_num; ++jj) {
+        int table_type = reg_table_types[jj];
+        int reg_id = op->src_reg_id[ii][table_type];
+        if (reg_id == REG_TABLE_REG_ID_INVALID)
+          continue;
+
+        struct reg_table_entry *src_entry = &map_data->reg_file[reg_type]->reg_table[table_type]->entries[reg_id];
+        ASSERT(op->proc_id, src_entry->onpath_consumers_num > 0);
+        src_entry->onpath_consumers_num--;
+        if (executed) {
+          ASSERT(op->proc_id, src_entry->onpath_consumed_count > 0);
+          src_entry->onpath_consumed_count--;
+        }
+      }
+    }
+  }
+
+  // (2) Restore the SRT and free this op's own dst physical entries.
+  for (uns ii = 0; ii < op->uop->num_dest_regs; ii++) {
+    int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+    if (reg_type == REG_FILE_REG_TYPE_OTHER)
+      continue;
+
+    int parent_reg_id = op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL];
+    ASSERT(op->proc_id, parent_reg_id != REG_TABLE_REG_ID_INVALID);
+
+    for (uns jj = 0; jj < reg_table_num; ++jj) {
+      int table_type = reg_table_types[jj];
+      ASSERT(op->proc_id, table_type > REG_TABLE_TYPE_ARCHITECTURAL && table_type < REG_TABLE_TYPE_NUM);
+      int reg_id = op->dst_reg_id[ii][table_type];
+      if (reg_id == REG_TABLE_REG_ID_INVALID)
+        continue;
+
+      struct reg_table *reg_table = map_data->reg_file[reg_type]->reg_table[table_type];
+
+      // restore the SRT pointer to the producer this squashed op displaced
+      int prev_reg_id = op->prev_dst_reg_id[ii][table_type];
+      reg_table->parent_reg_table->entries[parent_reg_id].child_reg_id = prev_reg_id;
+
+      // release the squashed op's own physical entry
+      struct reg_table_entry *entry = &reg_table->entries[reg_id];
+      ASSERT(op->proc_id, entry != NULL);
+
+      entry->num_refs--;
+      ASSERT(op->proc_id, entry->num_refs >= 0);
+      if (entry->num_refs > 0)
+        continue;
+
+      ASSERT(op->proc_id, entry->reg_state != REG_TABLE_ENTRY_STATE_FREE);
+      reg_table->ops->free(reg_table, entry);
+    }
+  }
+}
+
 // mark the previous entry with same archituctural id before the committed one as dead and remove it
 static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_table_num) {
   for (uns ii = 0; ii < op->uop->num_src_regs; ++ii) {
@@ -550,10 +655,16 @@ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_t
 
 static inline void reg_file_init_checkpoint() {
   for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
-    map_data->reg_file[ii]->reg_checkpoint = (struct reg_checkpoint *)malloc(sizeof(struct reg_checkpoint));
-    map_data->reg_file[ii]->reg_checkpoint->entries = (struct reg_table_entry *)malloc(
-        sizeof(struct reg_table_entry) * map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL]->size);
-    map_data->reg_file[ii]->reg_checkpoint->is_valid = FALSE;
+    struct reg_file *rf = map_data->reg_file[ii];
+    uns n = NODE_TABLE_SIZE;  // <= max in-flight ops, so the slot pool can never overflow
+    uns srt_size = rf->reg_table[REG_TABLE_TYPE_ARCHITECTURAL]->size;
+    rf->num_srt_checkpoints = n;
+    rf->reg_checkpoints = (struct reg_checkpoint *)malloc(sizeof(struct reg_checkpoint) * n);
+    for (uns s = 0; s < n; ++s) {
+      rf->reg_checkpoints[s].entries = (struct reg_table_entry *)malloc(sizeof(struct reg_table_entry) * srt_size);
+      rf->reg_checkpoints[s].is_valid = FALSE;
+      rf->reg_checkpoints[s].owner_op_num = 0;
+    }
   }
 }
 
@@ -562,14 +673,50 @@ static inline void reg_file_init_checkpoint() {
   oldest mispredicted branch is resolved
   Therefore, only maintain one checkpoint of that mispredicted branch for recovering SRT
 */
-static inline void reg_file_snapshot_srt() {
+static inline void reg_file_snapshot_srt(Counter owner_op_num) {
   for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
-    struct reg_table *srt = map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL];
-    struct reg_checkpoint *checkpoint = map_data->reg_file[ii]->reg_checkpoint;
+    struct reg_file *rf = map_data->reg_file[ii];
+    struct reg_table *srt = rf->reg_table[REG_TABLE_TYPE_ARCHITECTURAL];
+    // Find a free slot. With one slot per ROB entry there is always one (a snapshot is owned by an
+    // in-flight op). Multiple may be live at once after a flush re-fetched past several mispredicts.
+    struct reg_checkpoint *checkpoint = NULL;
+    for (uns s = 0; s < rf->num_srt_checkpoints; ++s) {
+      if (!rf->reg_checkpoints[s].is_valid) {
+        checkpoint = &rf->reg_checkpoints[s];
+        break;
+      }
+    }
+    ASSERT(map_data->proc_id, checkpoint != NULL);
     memcpy(checkpoint->entries, srt->entries, sizeof(struct reg_table_entry) * srt->size);
-
-    ASSERT(map_data->proc_id, !checkpoint->is_valid);
     checkpoint->is_valid = TRUE;
+    checkpoint->owner_op_num = owner_op_num;  // HELIOS: remember which op owns this snapshot
+  }
+}
+
+// HELIOS: a mis-fusion flush squashes ops with op_num > recovery_op_num. If the single outstanding SRT
+// checkpoint is owned by such a squashed (younger) branch, that branch will never recover to consume it
+// (rollback_srt), so a later on-path branch's snapshot would trip the !is_valid assert. Discard it here
+// (flag only — the flush already repaired the SRT incrementally). A checkpoint owned by a SURVIVING
+// branch (owner_op_num <= recovery_op_num) is kept: that branch recovers later and still needs it, and
+// its snapshot references only kept (older) physical regs.
+static inline void reg_file_discard_squashed_srt_checkpoint(Counter recovery_op_num) {
+  for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
+    struct reg_file *rf = map_data->reg_file[ii];
+    for (uns s = 0; s < rf->num_srt_checkpoints; ++s)
+      if (rf->reg_checkpoints[s].is_valid && rf->reg_checkpoints[s].owner_op_num > recovery_op_num)
+        rf->reg_checkpoints[s].is_valid = FALSE;
+  }
+}
+
+// HELIOS: drop the snapshots of this recovery point AND all younger (squashed) branches. Used when an
+// execute-time recovery repairs the SRT incrementally (the on-path-squash path below) instead of via
+// reg_file_rollback_srt, so the recovering branch's own snapshot is never consumed and must be freed.
+static inline void reg_file_discard_srt_checkpoints_ge(Counter op_num) {
+  for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
+    struct reg_file *rf = map_data->reg_file[ii];
+    for (uns s = 0; s < rf->num_srt_checkpoints; ++s)
+      if (rf->reg_checkpoints[s].is_valid && rf->reg_checkpoints[s].owner_op_num >= op_num)
+        rf->reg_checkpoints[s].is_valid = FALSE;
   }
 }
 
@@ -579,14 +726,23 @@ static inline void reg_file_snapshot_srt() {
   Therefore, only need to recover the SRT to the checkpoint without off_path operands before
   the mispredicted branch
 */
-static inline void reg_file_rollback_srt() {
+static inline void reg_file_rollback_srt(Counter recovering_op_num) {
   for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
-    struct reg_table *srt = map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL];
-    struct reg_checkpoint *checkpoint = map_data->reg_file[ii]->reg_checkpoint;
+    struct reg_file *rf = map_data->reg_file[ii];
+    struct reg_table *srt = rf->reg_table[REG_TABLE_TYPE_ARCHITECTURAL];
+    // Restore from the recovering branch's own snapshot.
+    struct reg_checkpoint *checkpoint = NULL;
+    for (uns s = 0; s < rf->num_srt_checkpoints; ++s)
+      if (rf->reg_checkpoints[s].is_valid && rf->reg_checkpoints[s].owner_op_num == recovering_op_num) {
+        checkpoint = &rf->reg_checkpoints[s];
+        break;
+      }
+    ASSERT(map_data->proc_id, checkpoint != NULL);
     memcpy(srt->entries, checkpoint->entries, sizeof(struct reg_table_entry) * srt->size);
-
-    ASSERT(map_data->proc_id, checkpoint->is_valid);
-    checkpoint->is_valid = FALSE;
+    // Consume this snapshot and drop all younger (squashed) ones; older branches' snapshots survive.
+    for (uns s = 0; s < rf->num_srt_checkpoints; ++s)
+      if (rf->reg_checkpoints[s].is_valid && rf->reg_checkpoints[s].owner_op_num >= recovering_op_num)
+        rf->reg_checkpoints[s].is_valid = FALSE;
   }
 }
 
@@ -1018,7 +1174,7 @@ void reg_renaming_scheme_realistic_rename(Op *op) {
 
   // checkpoint the speculative register table for recovering
   if (!op->off_path && op->uop->cf_type && op->bp_pred_info->recovery_point == RECOVER_AT_EXEC)
-    reg_file_snapshot_srt();
+    reg_file_snapshot_srt(op->op_num);
 }
 
 // do not check the reg file when issuing
@@ -1044,19 +1200,68 @@ void reg_renaming_scheme_realistic_produce(Op *op) {
 
 // flush registers of misprediction operands using the ptag info
 void reg_renaming_scheme_realistic_recover(Op *op) {
+  int reg_table_types[] = {REG_TABLE_TYPE_PHYSICAL};
+  int reg_table_num = sizeof(reg_table_types) / sizeof(reg_table_types[0]);
+
+  // HELIOS: a mis-fusion flush recovers on a NOT_CF load (so the cf_type assert below would fire) and
+  // squashes ON-PATH ops younger than the fused macro's last uop (recovery_op_num), for which the
+  // stock rollback_srt + reg_file_flush_mispredict path does not work: no SRT checkpoint was taken for
+  // the NOT_CF load, and flush_mispredict asserts off_path / never frees on-path entries. Repair the
+  // SRT and reclaim those registers incrementally instead. Gated on helios_flush_squash_allowed() so
+  // the flushes-off path (and scheme 0, which dispatches to the infinite no-op) stays byte-identical.
+  // Threshold is recovery_op_num (= helios_macro_last_op_num), not op->op_num, so the whole kept macro
+  // survives. A checkpoint owned by a squashed younger branch is dropped after the loop (see below).
+  // The sibling corner -- a later NORMAL branch recovery squashing on-path ops pre-fetched by a flush --
+  // is handled in the stock path below (has_onpath_squash).
+  if (helios_flush_squash_allowed() && bp_recovery_info->helios_flush) {
+    Counter recovery_op_num = bp_recovery_info->recovery_op_num;
+    for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > recovery_op_num;
+         op_p = (Op **)list_prev_element(&td->seq_op_list)) {
+      reg_file_flush_squash_helios(*op_p, reg_table_types, reg_table_num);
+    }
+    // if the outstanding SRT checkpoint belonged to a squashed younger branch, drop it (its owner is
+    // gone and will never roll it back) so the next on-path snapshot does not hit the !is_valid assert
+    reg_file_discard_squashed_srt_checkpoint(recovery_op_num);
+    return;
+  }
+
   // do not need to do flushing if it is a decoding flush
   ASSERT(op->proc_id, op->uop->cf_type);
   if (op->bp_pred_info->recovery_point != RECOVER_AT_EXEC)
     return;
 
+  // HELIOS: a flush can re-fetch the true on-path stream past this branch; a later normal mispredict of
+  // this branch then squashes those ON-PATH ops. The stock rollback_srt + reg_file_flush_mispredict
+  // path cannot free on-path entries (flush_mispredict asserts off_path). Detect that case and repair
+  // the SRT incrementally instead (reg_file_flush_squash_helios restores the SRT and frees on- AND
+  // off-path squashed entries); this branch's own snapshot is then unused, so drop it and any younger
+  // squashed snapshots. Gated on helios_flush_squash_allowed() so the flushes-off path is unchanged.
+  Flag has_onpath_squash = FALSE;
+  if (helios_flush_squash_allowed()) {
+    for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
+         op_p = (Op **)list_prev_element(&td->seq_op_list)) {
+      if (!(*op_p)->off_path) {
+        has_onpath_squash = TRUE;
+        break;
+      }
+    }
+  }
+  if (has_onpath_squash) {
+    for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
+         op_p = (Op **)list_prev_element(&td->seq_op_list)) {
+      reg_file_flush_squash_helios(*op_p, reg_table_types, reg_table_num);
+    }
+    reg_file_discard_srt_checkpoints_ge(op->op_num);
+    return;
+  }
+
   // rollback to the status that does not contain any off_path entries
-  reg_file_rollback_srt();
+  reg_file_rollback_srt(op->op_num);
 
   // release the registers from the youngest to the flush point
-  int reg_table_types[] = {REG_TABLE_TYPE_PHYSICAL};
   for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
        op_p = (Op **)list_prev_element(&td->seq_op_list)) {
-    reg_file_flush_mispredict(*op_p, reg_table_types, sizeof(reg_table_types) / sizeof(reg_table_types[0]));
+    reg_file_flush_mispredict(*op_p, reg_table_types, reg_table_num);
   }
 }
 
@@ -1134,7 +1339,7 @@ void reg_renaming_scheme_late_allocation_rename(Op *op) {
 
   // checkpoint the speculative register table for recovering
   if (!op->off_path && op->uop->cf_type && op->bp_pred_info->recovery_point == RECOVER_AT_EXEC)
-    reg_file_snapshot_srt();
+    reg_file_snapshot_srt(op->op_num);
 }
 
 /*
@@ -1200,7 +1405,7 @@ void reg_renaming_scheme_late_allocation_recover(Op *op) {
     return;
 
   // rollback to the status that does not contain any off_path entries
-  reg_file_rollback_srt();
+  reg_file_rollback_srt(op->op_num);
 
   // release the registers from the youngest to the flush point for both register tables
   int reg_table_types[] = {REG_TABLE_TYPE_VIRTUAL, REG_TABLE_TYPE_PHYSICAL};
@@ -1699,6 +1904,9 @@ void reg_renaming_scheme_early_release_nonspec_atomic_consume(Op *op) {
     }
   }
 }
+
+/**************************************************************************************/
+/* Register-file utilization diagnostics */
 
 /**************************************************************************************/
 /* Register File Function Driven Table */

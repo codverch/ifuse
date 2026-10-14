@@ -62,6 +62,13 @@ typedef struct Bp_Recovery_Info_struct {
   Flag wpe_flag;     /* This CFI has a WPE associated with it */
   Counter wpe_cycle; /* The cycle in which the WPE occurred */
 
+  Flag helios_flush; /* Indicates that the recovery scheduled was a for mis-fused (non-CF) load rather than a
+                        control-flow misprediction. */
+  uns64 helios_last_flush_inst_uid; /* Macro inst_uid of the most recently PROCESSED helios flush; a second
+                                       mis-fused mem uop of the SAME macro must not flush again (the pipe was
+                                       already flushed at exactly this boundary and its deferred TAGE snapshot
+                                       was erased by the first flush's restore).  */
+
 } Bp_Recovery_Info;
 
 /**************************************************************************************/
@@ -293,6 +300,28 @@ void set_bp_recovery_info(Bp_Recovery_Info* new_bp_recovery_info);
 
 void init_bp_recovery_info(uns8, Bp_Recovery_Info*);
 void bp_sched_recovery(Bp_Recovery_Info* bp_recovery_info, Op* op, Counter cycle);
+
+/* Schedules an on-path pipeline flush for a mis-fused (non-CF) load. Similar to
+   bp_sched_recovery, but re-steers to the load's next macro-instruction boundary, tags the recovery
+   as a HELIOS flush, and does not consume the (CF-only) branch recovery_info. */
+void helios_sched_recovery(Bp_Recovery_Info* bp_recovery_info, Op* op, Counter cycle);
+
+/* Used to relax the "only off-path ops are flushed" recovery asserts under the flush feature;
+   flushes-off keeps the original strict asserts. Wrapped in extern "C" so the C++ stage files
+   (idq/uop_queue/ft_op_buffer/lsq) link to the C definition. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+Flag helios_flush_squash_allowed(void);
+Flag helios_fusion_timing_active(void);
+Flag helios_flush_redundant(Op* op);
+#ifdef __cplusplus
+}
+#endif
+
+/* Restore the BP speculative state (global/target history, CRS) to the flushing op's fetch
+   snapshot for an on-path (non-CF) flush. The CF-only structural recovers do not apply. */
+void helios_bp_recover(Bp_Data* bp_data, Recovery_Info* info);
 void bp_sched_redirect(Bp_Recovery_Info*, Op*, Counter);
 void bp_stat_main_branch_resolve_latency(Op* op, Counter resolve_cycle, Flag recover_at_exec);
 

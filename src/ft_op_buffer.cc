@@ -94,9 +94,15 @@ void recover_ft_op_buffer(Icache_Stage* ic) {
       DEBUG(ic->proc_id, "Icache buffer flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
             op->off_path);
       flushed = TRUE;
-      ASSERT(ic->proc_id, op->off_path);
-      ASSERT(ic->proc_id, op->parent_FT);
-      ft_free_op(op);
+      ASSERT(ic->proc_id, op->off_path || helios_flush_squash_allowed());
+      // HELIOS flush: the dfe recovery (which runs before this pass in cmp_recover) can already have
+      // torn down this op's home FT, nulling parent_FT while a still-live off-path sibling FT keeps
+      // the op alive (observed: pool_valid=1, parent_FT=NULL, parent_FT_off_path live). Such an op is
+      // freed by the sibling FT's symmetric-ownership teardown (FT::~FT), not here -- same guard as
+      // the decode/uop-queue/map recover passes. Baseline (flushes off) always has parent_FT set.
+      ASSERT(ic->proc_id, op->parent_FT || helios_flush_squash_allowed());
+      if (op->parent_FT)
+        ft_free_op(op);
     } else {
       survivors.emplace_back(op);
     }

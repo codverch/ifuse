@@ -169,6 +169,10 @@ struct reg_checkpoint {
   // metadata for validation of the special checkpoint mechanism in Scarab
   Flag is_valid;
 
+  // HELIOS: Stores the op_num of the (branch) op that took this snapshot, so a mis-fusion flush can
+  // invalidate the stale checkpoint when if the op's branch op was squashed (owner_op_num > recovery_op_num).
+  Counter owner_op_num;
+
   // only map on-path op for recovery
   struct reg_table_entry *entries;
 };
@@ -176,7 +180,13 @@ struct reg_checkpoint {
 struct reg_file {
   /* properties */
   int reg_type;
-  struct reg_checkpoint *reg_checkpoint;
+  // HELIOS: an array of SRT checkpoints (one per outstanding mis-prediction branch). A flush can
+  // re-fetch the on-path stream past several un-resolved mispredicting branches, and those branches
+  // resolve out of order, so more than one checkpoint can be live at once. Sized to the ROB so it can
+  // never overflow (a snapshot is owned by an in-flight op). The single-slot assumption only held when
+  // the frontend stopped at the first mispredict (no flush).
+  struct reg_checkpoint *reg_checkpoints;
+  uns num_srt_checkpoints;
 
   /* register table instances */
   struct reg_table *reg_table[REG_TABLE_TYPE_NUM];
