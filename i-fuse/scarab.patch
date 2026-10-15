@@ -1,0 +1,4292 @@
+diff --git a/bin/power/power_intf.py b/bin/power/power_intf.py
+index 5bcc5b67..94b5ce6b 100755
+--- a/bin/power/power_intf.py
++++ b/bin/power/power_intf.py
+@@ -20,15 +20,23 @@
+ 
+ import os
+ import sys
++import subprocess
++
+ sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+-from scarab_globals import *
++# Import only scarab_paths — avoid scarab_globals.__init__ star-import which
++# pulls in scarab_stats/pandas (not available in minimal sim images).
++from scarab_globals import scarab_paths
+ 
+-list_command = ["perl", scarab_paths.bin_dir + "/power/power_intf.pl", scarab_paths.mcpat_bin, scarab_paths.cacti_bin] + sys.argv[1:]
++list_command = [
++    "perl",
++    scarab_paths.bin_dir + "/power/power_intf.pl",
++    scarab_paths.mcpat_bin,
++    scarab_paths.cacti_bin,
++] + sys.argv[1:]
+ 
+ print("Scarab power interface: executing command:")
+ print(list_command)
+-cmd = command.Command(' '.join(list_command))
+-exit_code = cmd.run()
+-print("Scarab power interface: command finished with exit code: " + str(exit_code));
++exit_code = subprocess.call(list_command)
++print("Scarab power interface: command finished with exit code: " + str(exit_code))
+ 
+-exit(exit_code)
++sys.exit(exit_code)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 386fdb8e..87a9134c 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -66,7 +66,7 @@ add_subdirectory(ramulator)
+ add_subdirectory(pin/pin_lib)
+ add_subdirectory(pin/pin_exec/testing)
+ 
+-set(scarab_dirs bp debug bp/template_lib dvfs frontend globals isa libs memory power prefetcher confidence .)
++set(scarab_dirs bp debug bp/template_lib dvfs frontend globals isa libs memory power prefetcher confidence ifuse .)
+ if(DEFINED ENV{SCARAB_ENABLE_PT_MEMTRACE})
+   set(scarab_dirs ${scarab_dirs} frontend/pt_memtrace)
+ endif()
+diff --git a/src/Makefile b/src/Makefile
+index e242b9cc..dc919ce0 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -78,7 +78,9 @@ help-nocolor: ## Print this message
+ # scarab_phony is a fake file that causes this rule to always run.
+ # We tried to make this a phony target, but it did not work. We suspect phony
+ # targets cannot be file paths.
+-$(BUILD_DIR_PREFIX)/%/scarab_phony: $(BUILD_DIR_PREFIX)/%/Makefile gitrev pin_exec
++# pin_exec is only required for the PIN exec-driven frontend. Memtrace
++# simulations, including I-Fuse runs, do not use it.
++$(BUILD_DIR_PREFIX)/%/scarab_phony: $(BUILD_DIR_PREFIX)/%/Makefile gitrev
+ 	@make -j --no-print-directory -C $(dir $@)
+ 	ln -sf $(dir $@)scarab scarab
+ 
+diff --git a/src/backend_occupancy.c b/src/backend_occupancy.c
+new file mode 100644
+index 00000000..0e642f5b
+--- /dev/null
++++ b/src/backend_occupancy.c
+@@ -0,0 +1,102 @@
++/***************************************************************************************
++ * File         : backend_occupancy.c
++ *    Per-cycle backend structure conditions, each sampled independently.
++ *
++ *    The top-down breakdown charges each stalled slot to exactly one cause, so
++ *    a cycle in which the PRF is full and the ROB head waits on a D-cache miss
++ *    counts only once. These counters instead ask, for every structure, "was
++ *    this condition true this cycle?" Conditions overlap, so they do not sum
++ *    to 100%.
++ *
++ *    Event-style conditions (port contention, bank conflicts, MSHR full,
++ *    busy FUs) are derived from the change in their existing event counters
++ *    since the previous sample, which runs once per cycle after every stage.
++ ***************************************************************************************/
++
++#include "backend_occupancy.h"
++
++#include "globals/global_defs.h"
++#include "globals/global_types.h"
++#include "globals/global_vars.h"
++
++#include "core.param.h"
++
++#include "ifuse/ifuse_stats.h"
++
++#include "lsq.h"
++#include "map.h"
++#include "map_rename.h"
++#include "node_stage.h"
++#include "op.h"
++#include "statistics.h"
++
++Flag rs_dispatch_blocked = FALSE;
++
++/* Event counters whose per-cycle change marks an event-style condition */
++typedef struct {
++  Stat_Enum stats[2];
++  uns num_stats;
++  Stat_Enum cycles_stat;
++} Event_Condition;
++
++static const Event_Condition event_conditions[] = {
++    {{RS_OP_READY_NOT_ISSUED_TOTAL}, 1, BE_PORT_CONTENTION_CYCLES},
++    {{FUS_BUSY_ON_PATH, FUS_BUSY_OFF_PATH}, 2, BE_FU_HELD_CYCLES},
++    {{DCACHE_READ_PORT_UNAVAILABLE_ONPATH, DCACHE_READ_PORT_UNAVAILABLE_OFFPATH}, 2, BE_DCACHE_BANK_CONFLICT_CYCLES},
++    {{DCACHE_FILL_PORT_UNAVAILABLE_ONPATH, DCACHE_FILL_PORT_UNAVAILABLE_OFFPATH}, 2, BE_DCACHE_FILL_PORT_CONFLICT_CYCLES},
++    {{DCACHE_MISS_WAITMEM}, 1, BE_MSHR_FULL_CYCLES},
++};
++#define NUM_EVENT_CONDITIONS (sizeof(event_conditions) / sizeof(event_conditions[0]))
++
++static Counter last_event_total[MAX_NUM_PROCS][NUM_EVENT_CONDITIONS];
++
++/* Same test as rename's reg_file_check_reg_num(), for one register type */
++static Flag reg_type_full(uns reg_type) {
++  struct reg_free_list* free_list = map_data->reg_file[reg_type]->reg_table[REG_TABLE_TYPE_PHYSICAL]->free_list;
++  return free_list->reg_free_num < REG_FILE_MAX_DESTS[reg_type] * ISSUE_WIDTH;
++}
++
++void backend_occupancy_observe_cycle(uns proc_id) {
++  STAT_EVENT(proc_id, BE_OBSERVED_CYCLES);
++
++  // Register-cycles: per-cycle sums of allocated and I-Fuse-reserved GP
++  // registers. Same work in both configs, so the sums compare directly.
++  struct reg_free_list* gp_free =
++      map_data->reg_file[REG_FILE_REG_TYPE_GENERAL_PURPOSE]->reg_table[REG_TABLE_TYPE_PHYSICAL]->free_list;
++  INC_STAT_EVENT(proc_id, BE_GP_REGS_IN_USE_SUM, REG_TABLE_INTEGER_PHYSICAL_SIZE - gp_free->reg_free_num);
++  INC_STAT_EVENT(proc_id, BE_GP_REGS_RESERVED_SUM, ifuse_extra_reg_in_use_now());
++
++  Flag gp_full = reg_type_full(REG_FILE_REG_TYPE_GENERAL_PURPOSE);
++  Flag vec_full = reg_type_full(REG_FILE_REG_TYPE_VECTOR);
++  if (gp_full)
++    STAT_EVENT(proc_id, BE_PRF_GP_FULL_CYCLES);
++  if (vec_full)
++    STAT_EVENT(proc_id, BE_PRF_VEC_FULL_CYCLES);
++  if (node->node_count == NODE_TABLE_SIZE)
++    STAT_EVENT(proc_id, BE_ROB_FULL_CYCLES);
++  if (!lsq_available(MEM_LD))
++    STAT_EVENT(proc_id, BE_LQ_FULL_CYCLES);
++  if (!lsq_available(MEM_ST))
++    STAT_EVENT(proc_id, BE_SQ_FULL_CYCLES);
++  if (rs_dispatch_blocked)
++    STAT_EVENT(proc_id, BE_RS_FULL_CYCLES);
++
++  Op* head = node->node_head;
++  if (head && head->state != OS_DONE && !OP_DONE(head)) {
++    if (head->engine_info.dcmiss)
++      STAT_EVENT(proc_id, BE_HEAD_DCACHE_MISS_CYCLES);
++    if (head->engine_info.l1_miss)
++      STAT_EVENT(proc_id, BE_HEAD_LLC_MISS_CYCLES);
++  }
++
++  for (uns ii = 0; ii < NUM_EVENT_CONDITIONS; ii++) {
++    const Event_Condition* cond = &event_conditions[ii];
++    Counter total = 0;
++    for (uns jj = 0; jj < cond->num_stats; jj++)
++      total += GET_STAT_EVENT(proc_id, cond->stats[jj]);
++    // Use != rather than >: the warmup reset can lower the running total.
++    if (total != last_event_total[proc_id][ii])
++      STAT_EVENT(proc_id, cond->cycles_stat);
++    last_event_total[proc_id][ii] = total;
++  }
++}
+diff --git a/src/backend_occupancy.h b/src/backend_occupancy.h
+new file mode 100644
+index 00000000..a8488e46
+--- /dev/null
++++ b/src/backend_occupancy.h
+@@ -0,0 +1,20 @@
++#ifndef __BACKEND_OCCUPANCY_H__
++#define __BACKEND_OCCUPANCY_H__
++
++#include "globals/global_types.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Set by the RS dispatcher when the oldest undispatched op found no RS
++ * entry */
++extern Flag rs_dispatch_blocked;
++
++void backend_occupancy_observe_cycle(uns proc_id);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* __BACKEND_OCCUPANCY_H__ */
+diff --git a/src/bp/bp.c b/src/bp/bp.c
+index ffac4e19..617e34c7 100644
+--- a/src/bp/bp.c
++++ b/src/bp/bp.c
+@@ -268,6 +268,22 @@ void bp_sched_recovery(Bp_Recovery_Info* bp_recovery_info, Op* op, Counter cycle
+     bp_recovery_info->recovery_unique_num = op->unique_num;
+     bp_recovery_info->recovery_inst_uid = op->inst_uid;
+     bp_recovery_info->wpe_flag = FALSE;
++    bp_recovery_info->ifuse_recovery = FALSE;
++
++    /* I-Fuse: clear flush_op and recover_at_exec after booking, as
++     * instruction-fusion does */
++    if (op->ifuse_flush_op && op->eom) {
++      op->bp_pred_main.recover_at_exec = FALSE;
++      op_select_bp_pred_info(op, BP_PRED_MAIN);
++      op->ifuse_flush_op = FALSE;
++      /*
++       * LD2 replay uses the pipeline flush machinery, but LD2 is not a
++       * control-flow instruction. Preserve that distinction so recovery does
++       * not restore branch predictor history from a non-CF op.
++       */
++      bp_recovery_info->ifuse_recovery = TRUE;
++    }
++
+     DEBUG(bp_recovery_info->proc_id,
+           "Recovery scheduled op_num:%s @ 0x%s next_fetch:0x%s offpath:%d recovery_cycle:%s (now:%s)\n",
+           unsstr64(op->op_num), hexstr64s(op->inst_info->addr), hexstr64s(next_fetch_addr), op->off_path,
+diff --git a/src/bp/bp.h b/src/bp/bp.h
+index 3bd0f6e6..52a86b04 100644
+--- a/src/bp/bp.h
++++ b/src/bp/bp.h
+@@ -62,6 +62,12 @@ typedef struct Bp_Recovery_Info_struct {
+   Flag wpe_flag;     /* This CFI has a WPE associated with it */
+   Counter wpe_cycle; /* The cycle in which the WPE occurred */
+ 
++  /*
++   * I-Fuse failures replay younger data-speculative operations without
++   * restoring branch-predictor history. LD2 itself is the recovery point.
++   */
++  Flag ifuse_recovery;
++
+ } Bp_Recovery_Info;
+ 
+ /**************************************************************************************/
+diff --git a/src/cmp_model.c b/src/cmp_model.c
+index a9ef1b56..844975c7 100644
+--- a/src/cmp_model.c
++++ b/src/cmp_model.c
+@@ -58,6 +58,9 @@
+ #include "freq.h"
+ #include "ft.h"
+ #include "idq_stage.h"
++#include "ifuse/ifuse_apt.h"
++#include "ifuse/ifuse_recovery.h"
++#include "ifuse/ifuse_train_retire.h"
+ #include "issue_queue.h"
+ #include "lsq.h"
+ #include "map_rename.h"
+@@ -65,6 +68,7 @@
+ #include "sim.h"
+ #include "statistics.h"
+ #include "topdown.h"
++#include "backend_occupancy.h"
+ #include "uop_queue_stage.h"
+ 
+ /**************************************************************************************/
+@@ -268,6 +272,11 @@ void cmp_cores(void) {
+       update_eip();
+ 
+       cmp_measure_chip_util();
++
++      // Per-cycle occupancy samples, taken after every stage has run
++      reg_file_observe_cycle(proc_id);
++      backend_occupancy_observe_cycle(proc_id);
++      apt_observe_cycle(proc_id);
+     }
+   }
+ }
+@@ -369,21 +378,37 @@ void cmp_recover() {
+   ASSERT(bp_recovery_info->proc_id, bp_recovery_info->recovery_cycle != MAX_CTR);
+   ASSERT(bp_recovery_info->proc_id, bp_recovery_info->proc_id == g_bp_data->proc_id);
+   ASSERT(bp_recovery_info->proc_id, bp_recovery_info->proc_id == map_data->proc_id);
++
++  /*
++   * Count an I-Fuse flush only when recovery actually fires. An older
++   * recovery can squash a failed LD2 before it reaches this point.
++   */
++  if (bp_recovery_info->ifuse_recovery)
++    STAT_EVENT(bp_recovery_info->proc_id, IFUSE_MISPREDICTION_FLUSHES);
++
+   bp_recovery_info->recovery_cycle = MAX_CTR;
+   bp_recovery_info->redirect_cycle = MAX_CTR;
++  ifuse_recovery_begin_flush(bp_recovery_info->recovery_op_num);
+   cmp_set_all_stages(bp_recovery_info->proc_id);
+   for (int bp_id = NUM_BPS - 1; bp_id >= 0; --bp_id) {
+     cmp_set_all_data(bp_recovery_info->proc_id, bp_id);
+     recover_decoupled_fe(bp_recovery_info->proc_id, bp_id, bp_recovery_info->recovery_cf_type,
+                          &bp_recovery_info->recovery_info);
+-    recover_fdip(bp_recovery_info->proc_id, bp_id);
++    if (!bp_recovery_info->ifuse_recovery)
++      recover_fdip(bp_recovery_info->proc_id, bp_id);
+   }
+ 
+-  topdown_bp_recovery(bp_recovery_info->proc_id, bp_recovery_info->recovery_op);
++  if (!bp_recovery_info->ifuse_recovery)
++    topdown_bp_recovery(bp_recovery_info->proc_id, bp_recovery_info->recovery_op);
+ 
+-  reg_file_recover(bp_recovery_info->recovery_op);
++  if (bp_recovery_info->ifuse_recovery)
++    reg_file_recover_ifuse(bp_recovery_info->recovery_op);
++  else
++    reg_file_recover(bp_recovery_info->recovery_op);
+   recover_thread(td, bp_recovery_info->recovery_fetch_addr, bp_recovery_info->recovery_op_num,
+                  bp_recovery_info->recovery_inst_uid, FALSE);
++  if (bp_recovery_info->ifuse_recovery)
++    recover_map_ifuse();
+ 
+   recover_icache_stage();
+   recover_decode_stage();
+@@ -396,6 +421,12 @@ void cmp_recover() {
+   recover_dcache_stage();
+   recover_memory();
+   recover_node_stage();
++  if (bp_recovery_info->ifuse_recovery && bp_recovery_info->recovery_op) {
++    bp_recovery_info->recovery_op->off_path = FALSE;
++    bp_recovery_info->recovery_op->recovery_scheduled = FALSE;
++  }
++  ifuse_recovery_end_flush();
++  bp_recovery_info->ifuse_recovery = FALSE;
+ }
+ 
+ /**************************************************************************************/
+@@ -449,8 +480,9 @@ void warmup_uncore(uns proc_id, Addr addr, Flag write) {
+ }
+ 
+ /**************************************************************************************/
+-/* Warm up select microarchitectural structures: BP, icache, dcache,
+- * and L1. No wrong path warmup. */
++/* Warm up select microarchitectural structures: BP, icache, dcache, L1, and
++ * the persistent retirement-side I-Fuse learning state. No wrong path
++ * warmup. */
+ 
+ void cmp_warmup(Op* op) {
+   uns proc_id = op->proc_id;
+@@ -530,6 +562,21 @@ void cmp_warmup(Op* op) {
+     }
+     bp_retire_op(bp_data, op);
+   }
++
++  /*
++   * Fast warmup bypasses the timing pipeline, so it never reaches the normal
++   * node-stage retirement hook. Feed its committed-operation stream to the
++   * same I-Fuse learner so the retired-load history, training table, and
++   * runtime-trained FCT reflect warmup execution. The reusable warmup Op
++   * skips FT's I-Fuse metadata initialization and classification path, so
++   * treat it as an unclassified committed operation.
++   *
++   * APT and ACI remain empty by design. They hold speculative, in-flight
++   * predictions, and fast warmup retires each operation immediately. Empty
++   * is therefore their architecturally correct state at the timing boundary.
++   */
++  op->ifuse_load_role = NOT_FUSION_CANDIDATE;
++  ifuse_train_retired_op(op);
+ }
+ 
+ static void cmp_measure_chip_util() {
+diff --git a/src/core.stat.def b/src/core.stat.def
+index 2cbb657d..047d1717 100644
+--- a/src/core.stat.def
++++ b/src/core.stat.def
+@@ -107,6 +107,11 @@ DEF_STAT(  LD_EXEC_CYCLES_2,   COUNT, NO_RATIO  )
+ DEF_STAT(  LD_EXEC_CYCLES_3,   COUNT, NO_RATIO  )
+ DEF_STAT(  LD_EXEC_CYCLES_4,   DIST , NO_RATIO  )
+ 
++// Total load latency consumed by on-path loads, accumulated over every retired
++// (on-path) load. The count column holds the summed cycles.
++DEF_STAT(  LD_EXEC_MINUS_FETCH_LATENCY,   COUNT,  NO_RATIO  )
++DEF_STAT(  LD_RETIRE_MINUS_FETCH_LATENCY, COUNT,  NO_RATIO  )
++
+ DEF_STAT(  ICACHE_STAGE_STARVED, DIST, NO_RATIO   )
+ DEF_STAT(  ICACHE_STAGE_NOT_STARVED,  DIST, NO_RATIO   )
+ 
+@@ -189,6 +194,15 @@ DEF_STAT(MAP_STAGE_STALL_ITSELF, DIST, NO_RATIO)
+ DEF_STAT(MAP_STAGE_NOT_STALL_ITSELF, DIST, NO_RATIO)
+ DEF_STAT(MAP_STAGE_LATE_ALLOCATE_SEND_BACK, COUNT, NO_RATIO)
+ 
++/* Register-file stall cycles (MAP_STAGE_STALL_ITSELF) by ROB head state.
++ * L1_MISS is Scarab's L1, the level below the D-cache. OCCUPANCY sums the ROB
++ * entry count over those cycles. Divide by MAP_STAGE_STALL_ITSELF for the
++ * mean. */
++DEF_STAT(MAP_STAGE_REG_FILE_STALL_HEAD_NOT_DONE, COUNT, NO_RATIO)
++DEF_STAT(MAP_STAGE_REG_FILE_STALL_HEAD_DC_MISS, COUNT, NO_RATIO)
++DEF_STAT(MAP_STAGE_REG_FILE_STALL_HEAD_L1_MISS, COUNT, NO_RATIO)
++DEF_STAT(MAP_STAGE_REG_FILE_STALL_ROB_OCCUPANCY, COUNT, NO_RATIO)
++
+ DEF_STAT(MAP_STAGE_RENAME_OP_ONPATH, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_RENAME_OP_OFFPATH, COUNT, NO_RATIO)
+ DEF_STAT(MAP_STAGE_RENAME_INT_REG_ONPATH, COUNT, NO_RATIO)
+@@ -818,6 +832,47 @@ DEF_STAT(TOPDOWN_FETCH_BUBBLES_GT_MIW_CYCLES, COUNT, NO_RATIO)
+ DEF_STAT(TOPDOWN_BR_RECOVER_AT_EXEC_RETIRED_CYCLES, COUNT, NO_RATIO)
+ DEF_STAT(TOPDOWN_MACHINE_CLEAR_CYCLES, COUNT, NO_RATIO)
+ 
++/* Backend-bound slots by the structure that stopped allocation (sums to the
++ * backend-bound slots; see topdown_backend_attribute()). */
++DEF_STAT(TOPDOWN_BE_FULL_PRF_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_ROB_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_LQ_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_SQ_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_OTHER_SLOTS, COUNT, NO_RATIO)
++/* The same slots by ROB head state */
++DEF_STAT(TOPDOWN_BE_HEAD_LLC_MISS_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_L1D_MISS_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_L1D_HIT_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_DCACHE_PORT_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_STORE_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_FUSED_LD2_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_IQ_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_PORT_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_EXEC_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_DEP_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_DONE_SLOTS, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_EMPTY_SLOTS, COUNT, NO_RATIO)
++
++/* Stalled cycles (nothing left the IDQ while it held ops), charged to the same
++ * structure and head state. Same order as the _SLOTS stats above. */
++DEF_STAT(TOPDOWN_BE_FULL_PRF_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_ROB_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_LQ_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_SQ_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_FULL_OTHER_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_LLC_MISS_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_L1D_MISS_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_L1D_HIT_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_DCACHE_PORT_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_STORE_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_FUSED_LD2_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_IQ_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_PORT_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_EXEC_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_DEP_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_DONE_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(TOPDOWN_BE_HEAD_EMPTY_CYCLES, COUNT, NO_RATIO)
++
+ /* Metrics */
+ DEF_STAT(TOPDOWN_FRONTEND_BOUND, COUNT, NO_RATIO)
+ DEF_STAT(TOPDOWN_BACKEND_BOUND, COUNT, NO_RATIO)
+@@ -832,4 +887,54 @@ DEF_STAT(TOPDOWN_MACHINE_CLEARS_BOUND, COUNT, NO_RATIO)
+ 
+ DEF_STAT(H2P_SEEN_MAIN, COUNT, NO_RATIO)
+ 
++/* Physical register file write ports: registers written per cycle, counted in
++ * the cycle each value is written back (see reg_file_observe_cycle()). GP and
++ * vector stats must stay adjacent and in reg_file_reg_type order. */
++DEF_STAT(PRF_WRITE_OBSERVED_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITES_BEYOND_RING, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITES_GP, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITES_VEC, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_PER_CYCLE_GP, RATIO, PRF_WRITE_OBSERVED_CYCLES)
++DEF_STAT(PRF_WRITE_PORTS_PER_CYCLE_VEC, RATIO, PRF_WRITE_OBSERVED_CYCLES)
++/* Cycles in which 0, 1, ..., 8-or-more GP (then vector) registers were
++ * written */
++DEF_STAT(PRF_WRITE_PORTS_GP_0, DIST, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_1, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_2, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_3, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_4, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_5, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_6, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_7, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_GP_8, DIST, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_0, DIST, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_1, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_2, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_3, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_4, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_5, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_6, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_7, COUNT, NO_RATIO)
++DEF_STAT(PRF_WRITE_PORTS_VEC_8, DIST, NO_RATIO)
++
+ /*******************************************************************/
++
++/* Backend structure conditions, each sampled independently once per cycle
++ * (see backend_occupancy.c). They overlap, so they do not sum to 100%. */
++DEF_STAT(BE_OBSERVED_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_PRF_GP_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_PRF_VEC_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_ROB_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_LQ_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_SQ_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_RS_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_PORT_CONTENTION_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_FU_HELD_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_DCACHE_BANK_CONFLICT_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_DCACHE_FILL_PORT_CONFLICT_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_MSHR_FULL_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_HEAD_DCACHE_MISS_CYCLES, COUNT, NO_RATIO)
++DEF_STAT(BE_HEAD_LLC_MISS_CYCLES, COUNT, NO_RATIO)
++/* Per-cycle sums of allocated GP registers and of those reserved by I-Fuse */
++DEF_STAT(BE_GP_REGS_IN_USE_SUM, COUNT, NO_RATIO)
++DEF_STAT(BE_GP_REGS_RESERVED_SUM, COUNT, NO_RATIO)
+diff --git a/src/dcache_stage.c b/src/dcache_stage.c
+index b7816313..61149b48 100644
+--- a/src/dcache_stage.c
++++ b/src/dcache_stage.c
+@@ -51,6 +51,9 @@
+ #include "prefetcher/stream_pref.h"
+ 
+ #include "cmp_model.h"
++#include "ifuse/ifuse.param.h"
++#include "ifuse/ifuse_exec_pair.h"
++#include "ifuse/ifuse_recovery.h"
+ #include "map.h"
+ #include "model.h"
+ #include "statistics.h"
+@@ -83,6 +86,14 @@ static inline Flag dcache_miss_new_mem_req(Op* op, Addr line_addr, Mem_Req_Type
+ static inline void dcache_miss_extra_access(Op* op, Cache* cache, Addr line_addr, uns8 proc_id, uns8 cache_cycle);
+ 
+ static inline Dcache_Data* dcache_fill_get_cacheline(Mem_Req* req);
++static void dcache_stage_ifuse_reserve_ld2_banks(void);
++
++/* I-Fuse: ld2_bank_holder[b] is the op_num of the fused LD1 holding bank b's
++ * read port for LD2's word this cycle, or 0 (ifuse_ld2_bank_conflict). */
++static Counter* ld2_bank_holder = NULL;
++/* Conventional loads delayed by each bank's reservation this cycle */
++static uns* ld2_bank_delays = NULL;
++static Flag dcache_stage_ifuse_ld2_bank(const Op* op, uns* bank);
+ static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data);
+ 
+ /**************************************************************************************/
+@@ -143,7 +154,8 @@ void recover_dcache_stage() {
+     }
+     if (op && op->op_num > bp_recovery_info->recovery_op_num) {
+       DEBUG(dc->proc_id, "Dcache flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
+-      ASSERT(dc->proc_id, op->off_path);
++      ASSERT(dc->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                              ifuse_recovery_is_flushing());
+       dc->sd.ops[ii] = NULL;
+       dc->sd.op_count--;
+     }
+@@ -192,6 +204,15 @@ void update_dcache_stage(Stage_Data* src_sd) {
+       continue;
+     }
+ 
++    // A validated fused LD2 still uses the load AGU, but LD1 already
++    // supplied its data. Complete AGU bookkeeping without issuing a redundant
++    // D-cache access or memory request.
++    if (ifuse_exec_pair_bypass_ld2_memory_pipeline(op)) {
++      ifuse_exec_pair_complete_ld2_agu(op);
++      dcache_stage_remove_src_op(src_sd, ii);
++      continue;
++    }
++
+     // squash non-memory and prefetch (when software prefetching is not enabled) ops
+     if (!dcache_stage_check_mem_type(op)) {
+       dcache_stage_remove_src_op(src_sd, ii);
+@@ -206,6 +227,9 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     ASSERTM(dc->proc_id, cycle_count >= op->exec_cycle, "o:%s  %s\n", unsstr64(op->op_num), Op_State_str(op->state));
+   }
+ 
++  /* Phase 1.5: fused accesses hold LD2's bank ahead of conventional ones */
++  dcache_stage_ifuse_reserve_ld2_banks();
++
+   /* phase 2 - check the dcache port availability and do dcache access */
+   int start_op_count = dc->sd.op_count;
+   Counter last_oldest_op_num = 0;
+@@ -238,12 +262,33 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     uns bank = BANK(op->oracle_info.va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR);
+     DEBUG(dc->proc_id, "check_read and write port availiabilty mem_type:%s bank:%d \n",
+           (op->inst_info->table_info.mem_type == MEM_ST) ? "ST" : "LD", bank);
++    uns ld2_bank;
++    Flag fused = dcache_stage_ifuse_ld2_bank(op, &ld2_bank);
+     if (!PERFECT_DCACHE && ((op->inst_info->table_info.mem_type == MEM_ST && !get_write_port(&dc->ports[bank])) ||
+                             (op->inst_info->table_info.mem_type != MEM_ST && !get_read_port(&dc->ports[bank])))) {
+       op->state = OS_WAIT_DCACHE;
+       STAT_EVENT(dc->proc_id, DCACHE_READ_PORT_UNAVAILABLE_ONPATH + op->off_path);
++      if (fused && ld2_bank_holder[ld2_bank] == op->op_num) {
++        // LD1 cannot access this cycle, so LD2's word is not read either.
++        ld2_bank_holder[ld2_bank] = 0;
++        dc->ports[ld2_bank].read_ports_in_use--;
++        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_RELEASED);
++        INC_STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_CONFLICT_DELAYS_RELEASED, ld2_bank_delays[ld2_bank]);
++      } else if (ld2_bank_holder && ld2_bank_holder[bank] && ld2_bank_holder[bank] != op->op_num &&
++                 op->inst_info->table_info.mem_type == MEM_LD && !op->off_path) {
++        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_CONFLICT_DELAYS);
++        ld2_bank_delays[bank]++;
++      }
+       continue;
+     }
++    if (fused) {
++      if (ld2_bank == bank)
++        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_SAME_AS_LD1);
++      else if (ld2_bank_holder[ld2_bank] == op->op_num)
++        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_RESERVED);
++      else
++        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_ALREADY_HELD);
++    }
+     // memory ops are marked as scheduled so that they can be removed from the node->rdy_list
+     op->state = OS_SCHEDULED;
+ 
+@@ -257,6 +302,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
+     op->dcache_cycle = cycle_count;
+     dc->idle_cycle = MAX2(dc->idle_cycle, cycle_count + DCACHE_CYCLES);
+ 
++    // Count every demand access issued to the L1-D (hit or miss), by path
++    if (!op->off_path)
++      STAT_EVENT(op->proc_id, DCACHE_ACCESS_ONPATH);
++    else
++      STAT_EVENT(op->proc_id, DCACHE_ACCESS_OFFPATH);
++
+     if (op->inst_info->table_info.mem_type == MEM_ST)
+       STAT_EVENT(op->proc_id, POWER_DCACHE_WRITE_ACCESS);
+     else
+@@ -866,3 +917,53 @@ static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data
+   ASSERT(dc->proc_id, data->read_count[0] || data->read_count[1] || data->write_count[0] || data->write_count[1] ||
+                           req->off_path || data->prefetch || data->HW_prefetch);
+ }
++
++/**************************************************************************************/
++/* I-Fuse: L1-D bank conflicts for LD2's word (ifuse_ld2_bank_conflict)
++ *
++ * A fused LD1 reads two words: its own and LD2's predicted word. Banks
++ * interleave every DCACHE_INTERLEAVE_FACTOR bytes, so the two words often sit
++ * in different banks. The fused access then holds LD2's bank read port too,
++ * ahead of conventional accesses: it reserves that port before ops arbitrate
++ * in program order. A conventional load that finds its bank's ports taken
++ * retries next cycle, so it waits exactly one cycle per conflict.
++ *
++ * Example: 8 banks, 4-byte interleave. LD1 reads offset 0 (bank 0) and LD2's
++ * predicted word is offset 16 (bank 4). In the cycle LD1 accesses, a
++ * conventional load to bank 4 finds the port held and retries next cycle.
++ *
++ * If LD1 itself misses its bank port, it gives LD2's port back. Older
++ * conventional loads that already failed on that port this cycle still wait;
++ * IFUSE_LD2_BANK_CONFLICT_DELAYS_RELEASED counts them.
++ * A word in LD1's own bank needs no second port, matching Scarab's one port
++ * per access regardless of width.
++ */
++
++static Flag dcache_stage_ifuse_ld2_bank(const Op* op, uns* bank) {
++  if (!IFUSE_LD2_BANK_CONFLICT || PERFECT_DCACHE || op->ifuse_load_role != LOAD1 || !op->ifuse_pred_ld2_va)
++    return FALSE;
++  *bank = BANK(op->ifuse_pred_ld2_va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR);
++  return TRUE;
++}
++
++static void dcache_stage_ifuse_reserve_ld2_banks(void) {
++  if (!IFUSE_LD2_BANK_CONFLICT || PERFECT_DCACHE)
++    return;
++  if (!ld2_bank_holder) {
++    ld2_bank_holder = (Counter*)calloc(DCACHE_BANKS, sizeof(Counter));
++    ld2_bank_delays = (uns*)calloc(DCACHE_BANKS, sizeof(uns));
++  }
++  memset(ld2_bank_holder, 0, DCACHE_BANKS * sizeof(Counter));
++  memset(ld2_bank_delays, 0, DCACHE_BANKS * sizeof(uns));
++
++  for (uns jj = 0; jj < dc->sd.max_op_count; jj++) {
++    Op* op = dc->sd.ops[jj];
++    uns ld2_bank;
++
++    if (!op || (op->replay && op->exec_cycle == MAX_CTR) || !dcache_stage_ifuse_ld2_bank(op, &ld2_bank) ||
++        ld2_bank == BANK(op->oracle_info.va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR) || ld2_bank_holder[ld2_bank])
++      continue;
++    if (get_read_port(&dc->ports[ld2_bank]))
++      ld2_bank_holder[ld2_bank] = op->op_num;
++  }
++}
+diff --git a/src/decode_stage.c b/src/decode_stage.c
+index 7e91eb4d..2f56bb94 100644
+--- a/src/decode_stage.c
++++ b/src/decode_stage.c
+@@ -51,6 +51,7 @@
+ 
+ #include "decoupled_frontend.h"
+ #include "ft.h"
++#include "ifuse/ifuse_recovery.h"
+ #include "op_pool.h"
+ #include "statistics.h"
+ #include "thread.h" /* for td */
+@@ -144,7 +145,8 @@ void recover_decode_stage() {
+           DEBUG(dec->proc_id, "Decode flushing op_num:%llu off_path:%u\n", (unsigned long long)cur->ops[jj]->op_num,
+                 cur->ops[jj]->off_path);
+           flushed = TRUE;
+-          ASSERT(cur->ops[jj]->proc_id, cur->ops[jj]->off_path);
++          ASSERT(cur->ops[jj]->proc_id, cur->ops[jj]->off_path || bp_recovery_info->ifuse_recovery ||
++                                             ifuse_recovery_is_flushing());
+           if (cur->ops[jj]->parent_FT)
+             ft_free_op(cur->ops[jj]);
+           cur->ops[jj] = NULL;
+diff --git a/src/decoupled_frontend.cc b/src/decoupled_frontend.cc
+index 07560d52..80e28751 100644
+--- a/src/decoupled_frontend.cc
++++ b/src/decoupled_frontend.cc
+@@ -14,6 +14,8 @@
+ extern "C" {
+ #include "bp/bp_targ_mech.h"
+ #include "bp/cbp_to_scarab.h"
++#include "ifuse/ifuse_fct.h"
++#include "ifuse/ifuse_recovery.h"
+ }
+ #include "frontend/frontend_intf.h"
+ #include "isa/isa_macros.h"
+@@ -215,6 +217,10 @@ void decoupled_fe_capture_main_pre_state(uns proc_id, Op* op) {
+   per_core_dfe[proc_id][MAIN_BP]->capture_main_pre_state_for_alts(op);
+ }
+ 
++void decoupled_fe_handle_ifuse_misprediction_flush(uns proc_id, uns bp_id, Op* op) {
++  per_core_dfe[proc_id][bp_id]->handle_ifuse_misprediction_flush(op);
++}
++
+ }  // extern "C"
+ 
+ /* Decoupled_FE member functions */
+@@ -244,9 +250,15 @@ void Decoupled_FE::init(uns _proc_id, uns _bp_id, Bp_Data* _bp_data, uns _dfe_tr
+   // state) and trace_redirect FATALs on any redirect call. Fail-fast at init
+   // so misconfigured runs surface clearly instead of silently misbehaving.
+   if (bp_id != MAIN_BP) {
++#ifdef ENABLE_PT_MEMTRACE
+     ASSERTM(_proc_id, FRONTEND == FE_PT || FRONTEND == FE_MEMTRACE,
+             "alt BP (bp_id=%u, trigger_policy=%u) requires FRONTEND in {FE_PT, FE_MEMTRACE}; got FRONTEND=%u\n", _bp_id,
+             dfe_trigger_policy, (uns)FRONTEND);
++#else
++    ASSERTM(_proc_id, FALSE,
++            "alt BP (bp_id=%u, trigger_policy=%u) requires a build with ENABLE_PT_MEMTRACE\n", _bp_id,
++            dfe_trigger_policy);
++#endif
+   }
+   // _ON_H2P_* policies gate on is_h2p_at_exec, which only registers a branch
+   // as H2P when its exec-stage mispred ratio crosses the threshold. To keep
+@@ -267,6 +279,13 @@ void Decoupled_FE::init(uns _proc_id, uns _bp_id, Bp_Data* _bp_data, uns _dfe_tr
+   cur_op = nullptr;
+   current_ft_to_push = nullptr;
+   saved_recovery_ft = nullptr;
++  if (bp_id == MAIN_BP) {
++    /*
++     * Build the FCT before its first fetch-time lookup. It starts empty and
++     * accepts runtime-trained candidates.
++     */
++    fct_init();
++  }
+ 
+   if (CONFIDENCE_ENABLE) {
+     if (bp_id != MAIN_BP)
+@@ -425,8 +444,12 @@ void Decoupled_FE::dfe_recover_op() {
+     INC_STAT_EVENT(proc_id, FTQ_OFFPATH_CYCLES, offpath_cycles);
+ 
+     // FIXME always fetch off path ops? should we get rid of this parameter?
+-    frontend_recover(proc_id, bp_id, bp_recovery_info->recovery_inst_uid);
+-    if (CONFIDENCE_ENABLE)
++    const Flag rebuild_frontend =
++        bp_recovery_info->ifuse_recovery ||
++        ifuse_recovery_frontend_rebuild_needed(bp_recovery_info->recovery_op_num);
++    frontend_recover(proc_id, bp_id, bp_recovery_info->recovery_inst_uid,
++                     bp_recovery_info->recovery_fetch_addr, rebuild_frontend);
++    if (CONFIDENCE_ENABLE && !bp_recovery_info->ifuse_recovery)
+       conf->recover(op);
+   }
+   redirect_cycle = 0;
+@@ -437,8 +460,45 @@ void Decoupled_FE::recover(Cf_Type cf_type, Recovery_Info* info) {
+   // For CONTINUE_ON_RECOVERY, alt continues the off-path stream main was on by
+   // resuming from this address (rather than restarting at the misprediction).
+   Op* alt_op = per_core_dfe[proc_id][MAIN_BP]->get_last_fetch_op();
+-  bp_recover_op(bp_data, cf_type, info);
++  /*
++   * I-Fuse recovery replays younger consumers after an LD2 value prediction
++   * failure. LD2 is not a control-flow instruction, so restoring branch
++   * predictor history from its metadata would corrupt predictor state.
++   */
++  if (!bp_recovery_info->ifuse_recovery)
++    bp_recover_op(bp_data, cf_type, info);
+   dfe_recover_op();
++  /*
++   * I-Fuse redirect resumes at the LD2 fall-through. A saved FT from an
++   * earlier speculative redirect may still begin at LD2 itself, so discard it
++   * and build the recovery FT after frontend_recover() has repositioned the
++   * trace.
++   */
++  const Flag rebuild_frontend =
++      bp_recovery_info->ifuse_recovery ||
++      ifuse_recovery_frontend_rebuild_needed(bp_recovery_info->recovery_op_num);
++  if (bp_id == MAIN_BP && rebuild_frontend) {
++    if (saved_recovery_ft) {
++      delete saved_recovery_ft;
++      saved_recovery_ft = nullptr;
++    }
++    /*
++     * Backend queues also rewind to LD2 + 1. Give regenerated fall-through
++     * ops the same dynamic numbering so IDQ does not wait for a discarded gap.
++     */
++    set_on_path_op_num(bp_recovery_info->recovery_op->op_num + 1);
++    saved_recovery_ft = new FT(proc_id, bp_id);
++    auto build_event =
++        saved_recovery_ft->build([](uns8 pid, uns8 bid) { return frontend_can_fetch_op(pid, bid); },
++                                 [](uns8 pid, uns8 bid, Op* op) -> bool {
++                                   frontend_fetch_op(pid, bid, op);
++                                   return true;
++                                 },
++                                 false, conf_off_path, []() { return decoupled_fe_get_next_on_path_op_num(); });
++    ASSERT(proc_id, build_event != FT_EVENT_BUILD_FAIL);
++    saved_recovery_ft->set_prebuilt(true);
++    ifuse_recovery_clear_frontend_redirect();
++  }
+   switch (dfe_trigger_policy) {
+     case PRIMARY_DFE:
+       if (stalled) {
+@@ -616,6 +676,17 @@ void Decoupled_FE::update() {
+         }
+         if (result.event == FT_EVENT_FETCH_BARRIER && FRONTEND == FE_PIN_EXEC_DRIVEN) {
+           stall(result.op);
++        } else if (next_state == SERVING_OFF_PATH) {
++          continue_off_path_ft_after_redirect();
++          STAT_EVENT(proc_id, DFE_GEN_ON_PATH_FT + is_off_path_state());
++          check_consecutivity_and_push_to_ftq();
++          cfs_taken_this_cycle += (current_ft_to_push->get_end_reason() == FT_TAKEN_BRANCH) ||
++                                  (current_ft_to_push->get_end_reason() == FT_BAR_FETCH);
++          ft_pushed_this_cycle++;
++          // The I-Fuse-extended FT has already been pushed. Advance the outer
++          // frontend loop so the generic tail below does not push it a second
++          // time.
++          continue;
+         } else if (result.event == FT_EVENT_MISPREDICT) {
+           redirect_to_off_path(result);
+         }
+@@ -628,6 +699,11 @@ void Decoupled_FE::update() {
+         // cf processed while building
+         if (exit_on_off_path)
+           return;
++        /*
++         * The I-Fuse same-FT case completes before it reaches this state.
++         * Ordinary branch off-path fetch must start a fresh FT: the previous
++         * raw pointer still names the FT already pushed into ftq.
++         */
+         current_ft_to_push = new FT(proc_id, bp_id);
+         ASSERT(proc_id, !current_ft_to_push->has_unread_ops());
+         while (current_ft_to_push->get_end_reason() == FT_NOT_ENDED) {
+@@ -925,6 +1001,8 @@ Off_Path_Reason Decoupled_FE::eval_off_path_reason(Op* op) {
+   if (!(op->bp_pred_info->recover_at_fe || op->bp_pred_info->recover_at_decode || op->bp_pred_info->recover_at_exec)) {
+     return REASON_NOT_IDENTIFIED;
+   }
++  if (op->ifuse_ld2_prediction_failed && op->eom)
++    return REASON_MISPRED;
+   // mispred
+   if (op->bp_pred_info->pred_orig != op->oracle_info.dir && !btb_pred_miss(op->btb_pred_info)) {
+     return REASON_MISPRED;
+@@ -992,6 +1070,83 @@ void Decoupled_FE::check_consecutivity_and_push_to_ftq() {
+   ftq.emplace_back(std::move(current_ft_to_push));
+ }
+ 
++void Decoupled_FE::handle_ifuse_misprediction_flush(Op* op) {
++  if (!op || op->off_path || !op->eom || !op->ifuse_ld2_prediction_failed)
++    return;
++
++  ASSERT(proc_id, bp_id == MAIN_BP);
++
++  /*
++   * This is the latest-Scarab equivalent of instruction-fusion's flush_op.
++   * The permanent failure bit remains available for training and statistics.
++   * This temporary bit is cleared once execute schedules recovery.
++   */
++  op->ifuse_flush_op = TRUE;
++  ifuse_recovery_note_frontend_redirect(op->op_num);
++  op->bp_pred_main.recover_at_exec = TRUE;
++  op_select_bp_pred_info(op, BP_PRED_MAIN);
++
++  const Addr pred_next_load_addr =
++      ADDR_PLUS_OFFSET(op->inst_info->addr, op->inst_info->trace_info.inst_size);
++  redirect_cycle = cycle_count;
++  next_state = SERVING_OFF_PATH;
++  frontend_redirect(proc_id, bp_id, op->inst_uid, pred_next_load_addr);
++  set_off_path_op_num(op->op_num + 1);
++  drive_alt_on_misprediction(op);
++}
++
++void Decoupled_FE::continue_off_path_ft_after_redirect() {
++  /* After an I-Fuse fetch redirect, the failing on-path LD2 keeps
++   * get_end_reason() at FT_NOT_ENDED (flush_op parity). Extend the same FT on
++   * the off-path until it ends naturally. Do not spin on the suppressed end
++   * reason alone. */
++  uint64_t extend_iters = 0;
++  while (true) {
++    if (++extend_iters > 100000) {
++      Op* last = current_ft_to_push->ops.empty() ? nullptr : current_ft_to_push->ops.back();
++      fprintf(stderr,
++              "[IFUSE] continue_off_path stuck iters=%llu ft_ops=%zu last_off=%u ld2_fail=%u end=%d\n",
++              (unsigned long long)extend_iters, current_ft_to_push->ops.size(),
++              last ? (unsigned)last->off_path : 0, last ? (unsigned)last->ifuse_flush_op : 0,
++              (int)current_ft_to_push->get_end_reason());
++      fflush(stderr);
++      ASSERT(proc_id, 0);
++    }
++    Op* last = current_ft_to_push->ops.empty() ? nullptr : current_ft_to_push->ops.back();
++    const bool ifuse_pending_offpath =
++        last && last->eom && last->ifuse_flush_op && !last->off_path;
++    if (!ifuse_pending_offpath && current_ft_to_push->get_end_reason() != FT_NOT_ENDED)
++      break;
++
++    auto build_event =
++        current_ft_to_push->build([](uns8 pid, uns8 bid) { return frontend_can_fetch_op(pid, bid); },
++                                  [](uns8 pid, uns8 bid, Op* op) -> bool {
++                                    frontend_fetch_op(pid, bid, op);
++                                    return true;
++                                  },
++                                  true, conf_off_path, []() { return decoupled_fe_get_next_off_path_op_num(); });
++    ASSERT(proc_id, build_event != FT_EVENT_BUILD_FAIL);
++    if (build_event == FT_EVENT_MISPREDICT || build_event == FT_EVENT_OFFPATH_TAKEN_REDIRECT) {
++      frontend_redirect(proc_id, bp_id, current_ft_to_push->get_last_op()->inst_uid,
++                        current_ft_to_push->get_last_op()->bp_pred_info->pred_npc);
++    } else if (build_event == FT_EVENT_FETCH_BARRIER && FRONTEND == FE_PIN_EXEC_DRIVEN) {
++      stall(current_ft_to_push->get_last_op());
++    }
++  }
++  if (current_ft_to_push->ended_by_exit()) {
++    next_state = INACTIVE;
++    exit_on_off_path = true;
++  } else {
++    /*
++     * Fetch remains speculative until LD2 reaches execute and recovery fires.
++     * If the extended FT ended on a taken off-path branch, the next FT must
++     * continue from that redirected off-path target.
++     */
++    next_state = SERVING_OFF_PATH;
++  }
++  ASSERT(proc_id, current_ft_to_push->get_end_reason() != FT_NOT_ENDED);
++}
++
+ void Decoupled_FE::redirect_to_off_path(FT_PredictResult result) {
+   // misprediction and redirection handling
+   ASSERT(proc_id, bp_id == MAIN_BP);
+@@ -1044,28 +1199,5 @@ void Decoupled_FE::redirect_to_off_path(FT_PredictResult result) {
+     drive_alt_on_misprediction(result.op);
+   }
+ 
+-  // set the current op number as the beginning op count of this off-path divergence
+   set_off_path_op_num(current_ft_to_push->get_last_op()->op_num + 1);
+-  // patching/modify the current FT with off-path op if current FT not ended
+-  while (current_ft_to_push->get_end_reason() == FT_NOT_ENDED) {
+-    auto build_event =
+-        current_ft_to_push->build([](uns8 pid, uns8 bid) { return frontend_can_fetch_op(pid, bid); },
+-                                  [](uns8 pid, uns8 bid, Op* op) -> bool {
+-                                    frontend_fetch_op(pid, bid, op);
+-                                    return true;
+-                                  },
+-                                  true, conf_off_path, []() { return decoupled_fe_get_next_off_path_op_num(); });
+-    ASSERT(proc_id, build_event != FT_EVENT_BUILD_FAIL);
+-    if (build_event == FT_EVENT_MISPREDICT || build_event == FT_EVENT_OFFPATH_TAKEN_REDIRECT) {
+-      frontend_redirect(proc_id, bp_id, current_ft_to_push->get_last_op()->inst_uid,
+-                        current_ft_to_push->get_last_op()->bp_pred_info->pred_npc);
+-    } else if (build_event == FT_EVENT_FETCH_BARRIER && FRONTEND == FE_PIN_EXEC_DRIVEN) {
+-      stall(current_ft_to_push->get_last_op());
+-    }
+-  }
+-  if (current_ft_to_push->ended_by_exit()) {
+-    next_state = INACTIVE;
+-    exit_on_off_path = true;
+-  }
+-  ASSERT(proc_id, current_ft_to_push->get_end_reason() != FT_NOT_ENDED);
+ }
+diff --git a/src/decoupled_frontend.h b/src/decoupled_frontend.h
+index 15456254..45bf445d 100644
+--- a/src/decoupled_frontend.h
++++ b/src/decoupled_frontend.h
+@@ -177,6 +177,7 @@ void decoupled_fe_on_main_prediction(uns proc_id, Op* op);
+ // dispatcher then re-applies spec_update on alt's TAGE with alt's direction.
+ // Skipped during warmup and for off-path predictions.
+ void decoupled_fe_capture_main_pre_state(uns proc_id, Op* op);
++void decoupled_fe_handle_ifuse_misprediction_flush(uns proc_id, uns bp_id, Op* op);
+ // FTQ API
+ void decoupled_fe_set_ftq_num(uint64_t ftq_ft_num);
+ uint64_t decoupled_fe_get_ftq_num();
+@@ -339,6 +340,7 @@ struct Decoupled_FE {
+   // fire this; alt _ON_PREDICTION semantics only cover main's on-path /
+   // recovery predict_ft pass.
+   void drive_alt_on_prediction(Op* trigger_op);
++  void handle_ifuse_misprediction_flush(Op* op);
+ 
+   // FSM states for DFE
+   enum DFE_STATE {
+@@ -352,9 +354,11 @@ struct Decoupled_FE {
+  protected:
+   void set_conf_off_path() { conf_off_path = true; }
+   void dfe_recover_op();
++  void reset_ftq_iterators();
+   bool is_off_path_state() const { return state == SERVING_OFF_PATH; }
+   void check_consecutivity_and_push_to_ftq();
+   void redirect_to_off_path(FT_PredictResult result);
++  void continue_off_path_ft_after_redirect();
+   inline uint64_t ftq_max_size() { return ftq_ft_num; }
+   void set_off_path_op_num(uint64_t op_num) { current_off_path_op_num = op_num; }
+   void set_on_path_op_num(uint64_t op_num) { this->op_num = op_num; }
+diff --git a/src/exec_stage.c b/src/exec_stage.c
+index 4756e916..ec30df32 100644
+--- a/src/exec_stage.c
++++ b/src/exec_stage.c
+@@ -28,310 +28,312 @@
+  * Description  :
+  ***************************************************************************************/
+ 
+-#include "exec_stage.h"
+-
+-#include "globals/assert.h"
+-#include "globals/global_defs.h"
+-#include "globals/global_types.h"
+-#include "globals/global_vars.h"
+-#include "globals/utils.h"
+-
+-#include "debug/debug.param.h"
+-#include "debug/debug_macros.h"
+-#include "debug/debug_print.h"
+-#include "debug/memview.h"
+-
+-#include "bp/bp.param.h"
+-#include "core.param.h"
+-#include "general.param.h"
+-#include "memory/memory.param.h"
+-
+-#include "bp/bp.h"
+-#include "dvfs/perf_pred.h"
+-
+-#include "cmp_model.h"
+-#include "exec_ports.h"
+-#include "issue_queue.h"
+-#include "map.h"
+-#include "map_rename.h"
+-#include "statistics.h"
+-#include "topdown.h"
+-
+-/**************************************************************************************/
+-/* Macros */
+-
+-#define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_EXEC_STAGE, ##args)
+-
+-/**************************************************************************************/
+-/* Global Variables */
+-
+-Exec_Stage* exec = NULL;
+-int op_type_delays[NUM_OP_TYPES];
+-int exec_off_path;
+-
+-/**************************************************************************************/
+-/* Prototypes */
+-
+-static inline void init_op_type_delays();
+-static inline void exec_stage_inc_power_stats(Op* op);
+-
+-static inline int exec_stage_check_fu_available(int ii);
+-static inline void exec_stage_reject_op(Stage_Data* src_sd, int ii, int event);
+-static inline void exec_stage_clear_fu(int ii);
+-
+-static inline void exec_stage_dep_wakeup(Op* op);
+-static inline void exec_stage_process_op(Op* op);
+-static inline void exec_stage_bp_resolve(Op* op);
+-
+-/**************************************************************************************/
+-/* set_exec_stage: */
+-
+-void set_exec_stage(Exec_Stage* new_exec) {
+-  exec = new_exec;
+-}
+-
+-/**************************************************************************************/
+-// init_op_type_delays
+-
+-static inline void init_op_type_delays() {
+-  uns ii;
+-
+-  if (UNIFORM_OP_DELAY) {
+-    for (ii = 0; ii < NUM_OP_TYPES; ii++)
+-      op_type_delays[ii] = UNIFORM_OP_DELAY;
+-    return;
+-  }
+-
+-#define OP_TYPE_DELAY_INIT(op_type) op_type_delays[OP_##op_type] = OP_##op_type##_DELAY;
+-  OP_TYPE_LIST(OP_TYPE_DELAY_INIT);
+-#undef OP_TYPE_DELAY_INIT
+-
+-  /* make sure all op_type_delays were set */
+-  for (ii = 0; ii < NUM_OP_TYPES; ii++)
+-    ASSERT(td->proc_id, op_type_delays[ii] != 0);
+-}
+-
+-/**************************************************************************************/
+-/* init_exec_stage: */
+-
+-void init_exec_stage(uns8 proc_id, const char* name) {
+-  ASSERT(proc_id, exec);
+-  DEBUG(proc_id, "Initializing %s stage\n", name);
+-
+-  memset(exec, 0, sizeof(Exec_Stage));
+-
+-  exec->proc_id = proc_id;
+-
+-  /* `name` is expected to be long-lived (caller passes string literals). */
+-  exec->sd.name = (char*)name;
+-  exec->sd.max_op_count = NUM_FUS;
+-  exec->sd.ops = (Op**)malloc(sizeof(Op*) * NUM_FUS);
+-  exec->fus_busy = 0;
+-
+-  reset_exec_stage();
+-
+-  init_op_type_delays();
+-}
+-
+-/**************************************************************************************/
+-/* reset_exec_stage: */
+-
+-void reset_exec_stage() {
+-  uns ii;
+-  exec->sd.op_count = 0;
+-  for (ii = 0; ii < NUM_FUS; ii++) {
+-    exec->sd.ops[ii] = NULL;
+-  }
+-}
+-
+-/**************************************************************************************/
+-/* recover_exec_stage: */
+-
+-void recover_exec_stage() {
+-  uns ii;
+-  exec_off_path = 0;
+-  for (ii = 0; ii < NUM_FUS; ii++) {
+-    Func_Unit* fu = &exec->fus[ii];
+-    Op* op = exec->sd.ops[ii];
+-    if (op && IS_FLUSHING_OP(op)) {
+-      op_select_bp_pred_info(op, BP_PRED_MAIN);
+-      DEBUG(exec->proc_id, "Recovery op found in Exec FU:%u op_num:%llu off_path:%u addr:0x%llx\n", ii,
+-            (unsigned long long)op->op_num, op->off_path, (unsigned long long)op->inst_info->addr);
+-    }
+-    if (op && FLUSH_OP(op)) {
+-      DEBUG(exec->proc_id, "Exec flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
+-      ASSERT(exec->proc_id, op->off_path);
+-      exec->sd.ops[ii] = NULL;
+-      exec->sd.op_count--;
+-      fu->avail_cycle = cycle_count + 1;
+-      fu->idle_cycle = cycle_count + 1;
+-    }
+-  }
+-}
+-
+-/**************************************************************************************/
+-/* debug_exec_stage: */
+-
+-void debug_exec_stage() {
+-  int ii;
+-  DPRINTF("# %-10s  op_count:%d  busy:", exec->sd.name, exec->sd.op_count);
+-  for (ii = 0; ii < NUM_FUS; ii++) {
+-    Func_Unit* fu = &exec->fus[ii];
+-    if (ii % 4 == 0)
+-      DPRINTF(" ");
+-    DPRINTF("%d", fu->idle_cycle > cycle_count);
+-  }
+-  DPRINTF("  mem_stalls_cycles:");
+-  for (ii = 0; ii < NUM_FUS; ii++) {
+-    Func_Unit* fu = &exec->fus[ii];
+-    if (ii % 4 == 0)
+-      DPRINTF(" ");
+-    DPRINTF("%d", fu->held_by_mem);
+-  }
+-  DPRINTF("\n");
+-  print_op_array(GLOBAL_DEBUG_STREAM, exec->sd.ops, NUM_FUS, NUM_FUS);
+-}
+-
+-/**************************************************************************************/
+-/* exec_cycle: */
+-
+-void update_exec_stage(Stage_Data* src_sd) {
+-  ASSERT(exec->proc_id, exec->sd.op_count <= exec->sd.max_op_count);
+-  exec->is_issue_stall = TRUE;
+-
+-  if (!exec_off_path) {
+-    if (!exec->sd.op_count)
+-      STAT_EVENT(exec->proc_id, EXEC_STAGE_STARVED);
+-    else
+-      STAT_EVENT(exec->proc_id, EXEC_STAGE_NOT_STARVED);
+-  } else {
+-    STAT_EVENT(exec->proc_id, EXEC_STAGE_OFF_PATH);
+-  }
+-
+-  for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
+-    if (src_sd->ops[ii] && src_sd->ops[ii]->off_path)
+-      exec_off_path = 1;
+-  }
+-
+-  /* phase 1 - success/failure of latching and wake up of dependent ops */
+-  for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
+-    /* do issue availability checking before latching */
+-    Op* op = src_sd->ops[ii];
+-    int ret = exec_stage_check_fu_available(ii);
+-    if (ret != 0) {
+-      // remove the op from the stage_data if it cannot be issued to make it get scheduled again
+-      if (op != NULL) {
+-        exec_stage_reject_op(src_sd, ii, ret);
+-      }
+-      ASSERT(exec->proc_id, !src_sd->ops[ii]);
+-      continue;
+-    }
+-
+-    // remove the fop from the FU if the FU is not busy and the instruction is ready to be issued
+-    Op* fop = exec->sd.ops[ii];
+-    if (fop) {
+-      exec_stage_clear_fu(ii);
+-    }
+-
+-    // check register file (late allocation) if op can issue
+-    if (!reg_file_issue(op)) {
+-      exec_stage_reject_op(src_sd, ii, FU_OTHER_UNAVAILABLE);
+-      STAT_EVENT(exec->proc_id, FU_STARVED);
+-      continue;
+-    }
+-
+-    // increase the starved counters after the FU checking
+-    if (!op) {
+-      STAT_EVENT(exec->proc_id, FU_STARVED);
+-      continue;
+-    }
+-
+-    ASSERTM(exec->proc_id, OP_SRCS_RDY(op), "op_num:%s\n", unsstr64(op->op_num));
+-    ASSERT(exec->proc_id,
+-           get_fu_type(op->inst_info->table_info.op_type, op->inst_info->table_info.is_simd) & exec->fus[ii].type);
+-
+-    /* if we get to here, then it means the op is going into the functional unit. */
+-    op->sched_cycle = cycle_count;
+-    DEBUG(exec->proc_id, "op_num:%s fu_num:%d sched_cycle:%s off_path:%d\n", unsstr64(op->op_num), op->fu_num,
+-          unsstr64(op->sched_cycle), op->off_path);
+-
+-    // consume the src register values
+-    reg_file_consume(op);
+-
+-    /*
+-     * We need to perform wake-ups of all the dependent ops.
+-     * This is done before the actual latching of the ops into the execute stage,
+-     * in order to make sure ops flushed or replayed during the current cycle do not sneak into the execute stage
+-     * because they happened to be processed before the op causing the recovery or replay.
+-     */
+-    exec_stage_dep_wakeup(op);
+-
+-    // PMU stat counters update
+-    exec_stage_inc_power_stats(op);
+-
+-    exec->is_issue_stall = FALSE;
+-  }
+-
+-  /* phase 2 - actual latching of instructions and setting of state */
+-  for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
+-    Func_Unit* fu = &exec->fus[ii];
+-    Op* op = src_sd->ops[ii];
+-
+-    // if there is still an op in the fu, the fu is still busy and there is nothing to latch
+-    Op* fop = exec->sd.ops[ii];
+-    if (fop) {
+-      /*
+-       * For each op, if its target FU is busy, one of the following must happen:
+-       * 1. The op is NULL. No op scheduled for this FU.
+-       * 2. The op is removed becase the FU is not yet ready.
+-       * 3. The op is removed becase of a memory stall.
+-       */
+-      ASSERT(exec->proc_id, !op);
+-
+-      STAT_EVENT(exec->proc_id, FU_BUSY_0 + ii);
+-      STAT_EVENT(exec->proc_id, FUS_BUSY_ON_PATH + fop->off_path);
+-      if (fop->inst_info->table_info.mem_type) {
+-        fu->held_by_mem = TRUE;
+-        STAT_EVENT(exec->proc_id, FU_BUSY_MEM_STALL);
+-      }
+-      continue;
+-    }
+-
+-    fu->held_by_mem = FALSE;
+-
+-    if (!op) {
+-      STAT_EVENT(exec->proc_id, FUS_EMPTY);
+-      continue;  // there is nothing to latch from the previous stage
+-    }
+-
+-    STAT_EVENT(exec->proc_id, FU_BUSY_0 + ii);
+-    STAT_EVENT(exec->proc_id, FUS_BUSY_ON_PATH + op->off_path);
+-
+-    /* remove the op from the "schedule" list */
+-    issue_queue_issued(op);
+-    src_sd->ops[ii] = NULL;
+-    src_sd->op_count--;
+-    ASSERT(exec->proc_id, src_sd->op_count >= 0);
+-
+-    /* busy the functional unit */
+-    exec->fus_busy++;
+-    exec->sd.ops[ii] = op;
+-    exec->sd.op_count++;
+-    ASSERT(exec->proc_id, exec->sd.op_count <= exec->sd.max_op_count);
+-    /*
+-     * The op's latency is assigned a negative value if it is not pipelined.
+-     * If the op is not pipelined, keep the functional unit busy for the full duration.
+-     */
+-    int latency = op->inst_info->latency;
+-    fu->avail_cycle = cycle_count + (latency < 0 ? -latency : 1);
+-    fu->idle_cycle = cycle_count + (latency < 0 ? -latency : latency);
+-
+-    /* update op status and execution metadata; increment PMU counters */
+-    exec_stage_process_op(op);
+-
+-    /* branch recovery/resolution */
++ #include "exec_stage.h"
++
++ #include "globals/assert.h"
++ #include "globals/global_defs.h"
++ #include "globals/global_types.h"
++ #include "globals/global_vars.h"
++ #include "globals/utils.h"
++ 
++ #include "debug/debug.param.h"
++ #include "debug/debug_macros.h"
++ #include "debug/debug_print.h"
++ #include "debug/memview.h"
++ 
++ #include "bp/bp.param.h"
++ #include "core.param.h"
++ #include "general.param.h"
++ #include "memory/memory.param.h"
++ 
++ #include "bp/bp.h"
++ #include "dvfs/perf_pred.h"
++ 
++ #include "cmp_model.h"
++ #include "exec_ports.h"
++ #include "issue_queue.h"
++ #include "map.h"
++ #include "map_rename.h"
++ #include "statistics.h"
++ #include "topdown.h"
++ 
++ /**************************************************************************************/
++ /* Macros */
++ 
++ #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_EXEC_STAGE, ##args)
++ 
++ /**************************************************************************************/
++ /* Global Variables */
++ 
++ Exec_Stage* exec = NULL;
++ int op_type_delays[NUM_OP_TYPES];
++ int exec_off_path;
++ 
++ /**************************************************************************************/
++ /* Prototypes */
++ 
++ static inline void init_op_type_delays();
++ static inline void exec_stage_inc_power_stats(Op* op);
++ 
++ static inline int exec_stage_check_fu_available(int ii);
++ static inline void exec_stage_reject_op(Stage_Data* src_sd, int ii, int event);
++ static inline void exec_stage_clear_fu(int ii);
++ 
++ static inline void exec_stage_dep_wakeup(Op* op);
++ static inline void exec_stage_process_op(Op* op);
++ static inline void exec_stage_bp_resolve(Op* op);
++ 
++ /**************************************************************************************/
++ /* set_exec_stage: */
++ 
++ void set_exec_stage(Exec_Stage* new_exec) {
++   exec = new_exec;
++ }
++ 
++ /**************************************************************************************/
++ // init_op_type_delays
++ 
++ static inline void init_op_type_delays() {
++   uns ii;
++ 
++   if (UNIFORM_OP_DELAY) {
++     for (ii = 0; ii < NUM_OP_TYPES; ii++)
++       op_type_delays[ii] = UNIFORM_OP_DELAY;
++     return;
++   }
++ 
++ #define OP_TYPE_DELAY_INIT(op_type) op_type_delays[OP_##op_type] = OP_##op_type##_DELAY;
++   OP_TYPE_LIST(OP_TYPE_DELAY_INIT);
++ #undef OP_TYPE_DELAY_INIT
++ 
++   /* make sure all op_type_delays were set */
++   for (ii = 0; ii < NUM_OP_TYPES; ii++)
++     ASSERT(td->proc_id, op_type_delays[ii] != 0);
++ }
++ 
++ /**************************************************************************************/
++ /* init_exec_stage: */
++ 
++ void init_exec_stage(uns8 proc_id, const char* name) {
++   ASSERT(proc_id, exec);
++   DEBUG(proc_id, "Initializing %s stage\n", name);
++ 
++   memset(exec, 0, sizeof(Exec_Stage));
++ 
++   exec->proc_id = proc_id;
++ 
++   /* `name` is expected to be long-lived (caller passes string literals). */
++   exec->sd.name = (char*)name;
++   exec->sd.max_op_count = NUM_FUS;
++   exec->sd.ops = (Op**)malloc(sizeof(Op*) * NUM_FUS);
++   exec->fus_busy = 0;
++ 
++   reset_exec_stage();
++ 
++   init_op_type_delays();
++ }
++ 
++ /**************************************************************************************/
++ /* reset_exec_stage: */
++ 
++ void reset_exec_stage() {
++   uns ii;
++   exec->sd.op_count = 0;
++   for (ii = 0; ii < NUM_FUS; ii++) {
++     exec->sd.ops[ii] = NULL;
++   }
++ }
++ 
++ /**************************************************************************************/
++ /* recover_exec_stage: */
++ 
++ void recover_exec_stage() {
++   uns ii;
++   exec_off_path = 0;
++   for (ii = 0; ii < NUM_FUS; ii++) {
++     Func_Unit* fu = &exec->fus[ii];
++     Op* op = exec->sd.ops[ii];
++     if (op && IS_FLUSHING_OP(op)) {
++       op_select_bp_pred_info(op, BP_PRED_MAIN);
++       DEBUG(exec->proc_id, "Recovery op found in Exec FU:%u op_num:%llu off_path:%u addr:0x%llx\n", ii,
++             (unsigned long long)op->op_num, op->off_path, (unsigned long long)op->inst_info->addr);
++     }
++     if (op && FLUSH_OP(op)) {
++       DEBUG(exec->proc_id, "Exec flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
++       ASSERT(exec->proc_id, op->off_path);
++       exec->sd.ops[ii] = NULL;
++       exec->sd.op_count--;
++       fu->avail_cycle = cycle_count + 1;
++       fu->idle_cycle = cycle_count + 1;
++     }
++   }
++ }
++ 
++ /**************************************************************************************/
++ /* debug_exec_stage: */
++ 
++ void debug_exec_stage() {
++   int ii;
++   DPRINTF("# %-10s  op_count:%d  busy:", exec->sd.name, exec->sd.op_count);
++   for (ii = 0; ii < NUM_FUS; ii++) {
++     Func_Unit* fu = &exec->fus[ii];
++     if (ii % 4 == 0)
++       DPRINTF(" ");
++     DPRINTF("%d", fu->idle_cycle > cycle_count);
++   }
++   DPRINTF("  mem_stalls_cycles:");
++   for (ii = 0; ii < NUM_FUS; ii++) {
++     Func_Unit* fu = &exec->fus[ii];
++     if (ii % 4 == 0)
++       DPRINTF(" ");
++     DPRINTF("%d", fu->held_by_mem);
++   }
++   DPRINTF("\n");
++   print_op_array(GLOBAL_DEBUG_STREAM, exec->sd.ops, NUM_FUS, NUM_FUS);
++ }
++ 
++ /**************************************************************************************/
++ /* exec_cycle: */
++ 
++ void update_exec_stage(Stage_Data* src_sd) {
++   ASSERT(exec->proc_id, exec->sd.op_count <= exec->sd.max_op_count);
++   exec->is_issue_stall = TRUE;
++ 
++   if (!exec_off_path) {
++     if (!exec->sd.op_count)
++       STAT_EVENT(exec->proc_id, EXEC_STAGE_STARVED);
++     else
++       STAT_EVENT(exec->proc_id, EXEC_STAGE_NOT_STARVED);
++   } else {
++     STAT_EVENT(exec->proc_id, EXEC_STAGE_OFF_PATH);
++   }
++ 
++   for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
++     if (src_sd->ops[ii] && src_sd->ops[ii]->off_path)
++       exec_off_path = 1;
++   }
++ 
++   /* phase 1 - success/failure of latching and wake up of dependent ops */
++   for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
++     /* do issue availability checking before latching */
++     Op* op = src_sd->ops[ii];
++     int ret = exec_stage_check_fu_available(ii);
++     if (ret != 0) {
++       // remove the op from the stage_data if it cannot be issued to make it get scheduled again
++       if (op != NULL) {
++         exec_stage_reject_op(src_sd, ii, ret);
++       }
++       ASSERT(exec->proc_id, !src_sd->ops[ii]);
++       continue;
++     }
++ 
++     // remove the fop from the FU if the FU is not busy and the instruction is ready to be issued
++     Op* fop = exec->sd.ops[ii];
++     if (fop) {
++       exec_stage_clear_fu(ii);
++     }
++ 
++     // check register file (late allocation) if op can issue
++     if (!reg_file_issue(op)) {
++       exec_stage_reject_op(src_sd, ii, FU_OTHER_UNAVAILABLE);
++       STAT_EVENT(exec->proc_id, FU_STARVED);
++       continue;
++     }
++ 
++     // increase the starved counters after the FU checking
++     if (!op) {
++       STAT_EVENT(exec->proc_id, FU_STARVED);
++       continue;
++     }
++ 
++     ASSERTM(exec->proc_id, OP_SRCS_RDY(op), "op_num:%s\n", unsstr64(op->op_num));
++     ASSERT(exec->proc_id,
++            get_fu_type(op->inst_info->table_info.op_type, op->inst_info->table_info.is_simd) & exec->fus[ii].type);
++ 
++     /* if we get to here, then it means the op is going into the functional unit. */
++     op->sched_cycle = cycle_count;
++     DEBUG(exec->proc_id, "op_num:%s fu_num:%d sched_cycle:%s off_path:%d\n", unsstr64(op->op_num), op->fu_num,
++           unsstr64(op->sched_cycle), op->off_path);
++ 
++     // consume the src register values
++     reg_file_consume(op);
++ 
++     /*
++      * We need to perform wake-ups of all the dependent ops.
++      * This is done before the actual latching of the ops into the execute stage,
++      * in order to make sure ops flushed or replayed during the current cycle do not sneak into the execute stage
++      * because they happened to be processed before the op causing the recovery or replay.
++      */
++     exec_stage_dep_wakeup(op);
++ 
++     // PMU stat counters update
++     exec_stage_inc_power_stats(op);
++ 
++     exec->is_issue_stall = FALSE;
++   }
++ 
++   /* phase 2 - actual latching of instructions and setting of state */
++   for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
++     Func_Unit* fu = &exec->fus[ii];
++     Op* op = src_sd->ops[ii];
++ 
++     // if there is still an op in the fu, the fu is still busy and there is nothing to latch
++     Op* fop = exec->sd.ops[ii];
++     if (fop) {
++       /*
++        * For each op, if its target FU is busy, one of the following must happen:
++        * 1. The op is NULL. No op scheduled for this FU.
++        * 2. The op is removed becase the FU is not yet ready.
++        * 3. The op is removed becase of a memory stall.
++        */
++       ASSERT(exec->proc_id, !op);
++ 
++       STAT_EVENT(exec->proc_id, FU_BUSY_0 + ii);
++       STAT_EVENT(exec->proc_id, FUS_BUSY_ON_PATH + fop->off_path);
++       if (fop->inst_info->table_info.mem_type) {
++         fu->held_by_mem = TRUE;
++         STAT_EVENT(exec->proc_id, FU_BUSY_MEM_STALL);
++       }
++       continue;
++     }
++ 
++     fu->held_by_mem = FALSE;
++ 
++     if (!op) {
++       STAT_EVENT(exec->proc_id, FUS_EMPTY);
++       continue;  // there is nothing to latch from the previous stage
++     }
++ 
++     STAT_EVENT(exec->proc_id, FU_BUSY_0 + ii);
++     STAT_EVENT(exec->proc_id, FUS_BUSY_ON_PATH + op->off_path);
++ 
++     /* remove the op from the "schedule" list */
++     issue_queue_issued(op);
++     src_sd->ops[ii] = NULL;
++     src_sd->op_count--;
++     ASSERT(exec->proc_id, src_sd->op_count >= 0);
++ 
++     /* busy the functional unit */
++     exec->fus_busy++;
++     exec->sd.ops[ii] = op;
++     exec->sd.op_count++;
++     ASSERT(exec->proc_id, exec->sd.op_count <= exec->sd.max_op_count);
++     /*
++      * The op's latency is assigned a negative value if it is not pipelined.
++      * If the op is not pipelined, keep the functional unit busy for the full duration.
++      */
++     int latency = op->inst_info->latency;
++     fu->avail_cycle = cycle_count + (latency < 0 ? -latency : 1);
++     fu->idle_cycle = cycle_count + (latency < 0 ? -latency : latency);
++ 
++     /* update op status and execution metadata; increment PMU counters */
++     exec_stage_process_op(op);
++ 
++    /* Branch recovery/resolution (I-Fuse: also allow a non-CF failed LD2 with
++     * recover_at_exec) */
+     Flag is_replay = FALSE;  // TODO: check if this val is needed
+-    if (op->inst_info->table_info.cf_type && !is_replay) {
++    if ((op->inst_info->table_info.cf_type && !is_replay) ||
++        (op->ifuse_flush_op && op->eom && !op->off_path)) {
+       /*
+        * branch recovery currently does not like to be done more than 1 time.
+        * since we don't have any way to know if an op is going to be replayed,
+@@ -339,247 +341,248 @@ void update_exec_stage(Stage_Data* src_sd) {
+        */
+       exec_stage_bp_resolve(op);
+     }
+-
+-    /* value prediction recovery/resolution code  */
+-    // if we know the value at this point if not ? then we need to wait.
+-  }
+-
+-  if (!exec->is_issue_stall) {
+-    STAT_EVENT(exec->proc_id, EXEC_STAGE_NO_ISSUE_STALL_CYCLE);
+-    if (!exec_off_path) {
+-      STAT_EVENT(exec->proc_id, EXEC_STAGE_NO_ISSUE_STALL_CYCLE_ONPATH);
+-    }
+-  }
+-
+-  exec->fus_busy = 0;
+-  Counter fu_busy_num = 0;
+-  for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
+-    Func_Unit* fu = &exec->fus[ii];
+-    /*
+-     * a functional unit is busy if there's an op in any stage
+-     * of its pipeline unless it's stalled by memory
+-     */
+-    if (fu->idle_cycle > cycle_count) {
+-      if (!fu->held_by_mem)
+-        exec->fus_busy++;
+-    }
+-
+-    if (fu->avail_cycle > cycle_count) {
+-      fu_busy_num++;
+-    }
+-  }
+-
+-  topdown_exec_update(exec->proc_id, fu_busy_num);
+-  memview_fus_busy(exec->proc_id, exec->fus_busy);
+-}
+-
+-/**************************************************************************************/
+-/* Inline Methods */
+-
+-static inline void exec_stage_inc_power_stats(Op* op) {
+-  STAT_EVENT(op->proc_id, POWER_ROB_READ);
+-  STAT_EVENT(op->proc_id, POWER_ROB_WRITE);
+-
+-  STAT_EVENT(op->proc_id, POWER_OP);
+-
+-  if (op->inst_info->table_info.op_type > OP_NOP && op->inst_info->table_info.op_type < OP_FLD) {
+-    STAT_EVENT(op->proc_id, POWER_INT_OP);
+-  } else if (op->inst_info->table_info.op_type >= OP_FLD) {
+-    STAT_EVENT(op->proc_id, POWER_FP_OP);
+-  }
+-
+-  if (op->inst_info->table_info.mem_type == MEM_LD || op->inst_info->table_info.mem_type == MEM_PF) {
+-    STAT_EVENT(op->proc_id, POWER_LD_OP);
+-  } else if (op->inst_info->table_info.mem_type == MEM_ST) {
+-    STAT_EVENT(op->proc_id, POWER_ST_OP);
+-  }
+-
+-  if (!op->off_path) {
+-    STAT_EVENT(op->proc_id, POWER_COMMITTED_OP);
+-
+-    if (op->inst_info->table_info.op_type > OP_NOP && op->inst_info->table_info.op_type < OP_FLD) {
+-      STAT_EVENT(op->proc_id, POWER_COMMITTED_INT_OP);
+-    } else {
+-      STAT_EVENT(op->proc_id, POWER_COMMITTED_FP_OP);
+-    }
+-  }
+-
+-  if (op->inst_info->table_info.cf_type == CF_CALL || op->inst_info->table_info.cf_type == CF_ICALL) {
+-    STAT_EVENT(op->proc_id, POWER_FUNCTION_CALL);
+-  }
+-
+-  if (op->inst_info->table_info.cf_type > NOT_CF) {
+-    STAT_EVENT(op->proc_id, POWER_BRANCH_OP);
+-  }
+-
+-  if (power_get_fu_type(op->inst_info->table_info.op_type, op->inst_info->table_info.is_simd) != POWER_FU_FPU) {
+-    /* Integer instructions */
+-    INC_STAT_EVENT(op->proc_id, POWER_RENAME_READ, 2);
+-    STAT_EVENT(op->proc_id, POWER_RENAME_WRITE);
+-
+-    STAT_EVENT(op->proc_id, POWER_INST_WINDOW_READ);
+-    STAT_EVENT(op->proc_id, POWER_INST_WINDOW_WRITE);
+-    STAT_EVENT(op->proc_id, POWER_INST_WINDOW_WAKEUP_ACCESS);
+-
+-    INC_STAT_EVENT(op->proc_id, POWER_INT_REGFILE_READ, op->inst_info->table_info.num_src_regs);
+-    INC_STAT_EVENT(op->proc_id, POWER_INT_REGFILE_WRITE, op->inst_info->table_info.num_dest_regs);
+-
+-    if (power_get_fu_type(op->inst_info->table_info.op_type, op->inst_info->table_info.is_simd) == POWER_FU_MUL_DIV) {
+-      INC_STAT_EVENT(op->proc_id, POWER_MUL_ACCESS, abs(op_type_delays[op->inst_info->table_info.type]));
+-      STAT_EVENT(op->proc_id, POWER_CDB_MUL_ACCESS);
+-    } else {
+-      INC_STAT_EVENT(op->proc_id, POWER_IALU_ACCESS, abs(op_type_delays[op->inst_info->table_info.type]));
+-      STAT_EVENT(op->proc_id, POWER_CDB_IALU_ACCESS);
+-    }
+-  } else {
+-    /*Floating Point instructions*/
+-    STAT_EVENT(op->proc_id, POWER_FP_RENAME_WRITE);
+-    INC_STAT_EVENT(op->proc_id, POWER_FP_RENAME_READ, 2);
+-
+-    STAT_EVENT(op->proc_id, POWER_FP_INST_WINDOW_READ);
+-    STAT_EVENT(op->proc_id, POWER_FP_INST_WINDOW_WRITE);
+-    STAT_EVENT(op->proc_id, POWER_FP_INST_WINDOW_WAKEUP_ACCESS);
+-
+-    INC_STAT_EVENT(op->proc_id, POWER_FP_REGFILE_READ, op->inst_info->table_info.num_src_regs);
+-    INC_STAT_EVENT(op->proc_id, POWER_FP_REGFILE_WRITE, op->inst_info->table_info.num_dest_regs);
+-
+-    INC_STAT_EVENT(op->proc_id, POWER_FPU_ACCESS, abs(op_type_delays[op->inst_info->table_info.type]));
+-    STAT_EVENT(op->proc_id, POWER_CDB_FPU_ACCESS);
+-  }
+-
+-  if (op->inst_info->table_info.mem_type == MEM_ST) {
+-    STAT_EVENT(op->proc_id, POWER_DTLB_ACCESS);
+-  }
+-}
+-
+-static inline void exec_stage_dep_wakeup(Op* op) {
+-  Counter exec_cycle = cycle_count + abs(op->inst_info->latency);
+-
+-  // non-memory ops will always distribute their results after the op's latency
+-  if (op->inst_info->table_info.mem_type == NOT_MEM) {
+-    op->wake_cycle = exec_cycle;
+-    wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
+-    return;
+-  }
+-
+-  // stores have their addresses computed in this cycle and also write their data into the store buffer
+-  if (op->inst_info->table_info.mem_type == MEM_ST) {
+-    // only wake up if this is the first time this op executes
+-    if (op->exec_count == 0) {
+-      op->wake_cycle = exec_cycle;
+-      wake_up_ops(op, MEM_ADDR_DEP, model->wake_hook);
+-      wake_up_ops(op, MEM_DATA_DEP, model->wake_hook);
+-    }
+-    return;
+-  }
+-
+-  // all other ops (loads) will be handled by the memory system
+-}
+-
+-static inline void exec_stage_reject_op(Stage_Data* src_sd, int ii, int event) {
+-  Op* op = src_sd->ops[ii];
+-
+-  issue_queue_reject(op);
+-  src_sd->ops[ii] = NULL;
+-  src_sd->op_count--;
+-
+-  ASSERT(exec->proc_id, event == FU_UNAVAILABLE || event == FU_MEM_UNAVAILABLE || event == FU_OTHER_UNAVAILABLE);
+-  STAT_EVENT(exec->proc_id, event);
+-
+-  if (event == FU_OTHER_UNAVAILABLE)
+-    return;
+-
+-  int simd_stat_base = op->inst_info->table_info.is_simd ? FU_REJECTED_OP_INV_SIMD : FU_REJECTED_OP_INV_NOT_SIMD;
+-  STAT_EVENT(exec->proc_id, simd_stat_base + op->inst_info->table_info.op_type);
+-}
+-
+-static inline void exec_stage_clear_fu(int ii) {
+-  exec->sd.ops[ii] = NULL;
+-  exec->sd.op_count--;
+-  ASSERT(exec->proc_id, exec->sd.op_count >= 0);
+-}
+-
+-static inline int exec_stage_check_fu_available(int ii) {
+-  /* check whether the functional unit is busy first */
+-  // if the FU is not available, then nullify node stage entry to make instruction get scheduled again
+-  Func_Unit* fu = &exec->fus[ii];
+-  if (cycle_count < fu->avail_cycle) {
+-    return FU_UNAVAILABLE;
+-  }
+-
+-  /* if the functional unit is not busy, check the op assigned to it */
+-  // if no operation is occupying the FU, return that the FU is available
+-  Op* fop = exec->sd.ops[ii];
+-  if (!fop) {
+-    return 0;
+-  }
+-
+-  // remove non-mem op currently in the FU
+-  if (!fop->inst_info->table_info.mem_type) {
+-    return 0;
+-  }
+-
+-  // need to kill it if it is a simultaneous replay
+-  if (fop->replay && fop->replay_cycle == cycle_count) {
+-    STAT_EVENT(exec->proc_id, FU_REPLAY);
+-    return 0;
+-  }
+-
+-  // memory stall
+-  return FU_MEM_UNAVAILABLE;
+-}
+-
+-static inline void exec_stage_process_op(Op* op) {
+-  // set the op's state to reflect it's execution
+-  if (op->inst_info->table_info.mem_type == NOT_MEM || STALL_ON_WAIT_MEM) {
+-    op->state = OS_SCHEDULED;
+-  } else {
+-    // mem op may fail if it misses and can't get a mem req buffer
+-    op->state = OS_TENTATIVE;
+-  }
+-
+-  op->exec_cycle = cycle_count + abs(op->inst_info->latency);
+-  op->exec_count++;
+-  if (op->inst_info->table_info.mem_type == NOT_MEM)
+-    op->done_cycle = op->exec_cycle;
+-
+-  STAT_EVENT(op->proc_id, EXEC_ON_PATH_INST + op->off_path);
+-  STAT_EVENT(op->proc_id, EXEC_ON_PATH_INST_MEM + (op->inst_info->table_info.mem_type == NOT_MEM) + 2 * op->off_path);
+-  STAT_EVENT(op->proc_id, EXEC_ALL_INST);
+-
+-  DEBUG(exec->proc_id, "op_num:%s fu_num:%d exec_cycle:%s done_cycle:%s off_path:%d\n", unsstr64(op->op_num),
+-        op->fu_num, unsstr64(op->exec_cycle), unsstr64(op->done_cycle), op->off_path);
+-}
+-
+-static inline void exec_stage_bp_resolve(Op* op) {
+-  if (!BP_UPDATE_AT_RETIRE) {
+-    // this code updates the branch prediction structures
+-    if (op->inst_info->table_info.cf_type >= CF_IBR)
+-      bp_target_known_op(g_bp_data, op);
+-
+-    bp_resolve_op(g_bp_data, op);
+-  }
+-
++ 
++     /* value prediction recovery/resolution code  */
++     // if we know the value at this point if not ? then we need to wait.
++   }
++ 
++   if (!exec->is_issue_stall) {
++     STAT_EVENT(exec->proc_id, EXEC_STAGE_NO_ISSUE_STALL_CYCLE);
++     if (!exec_off_path) {
++       STAT_EVENT(exec->proc_id, EXEC_STAGE_NO_ISSUE_STALL_CYCLE_ONPATH);
++     }
++   }
++ 
++   exec->fus_busy = 0;
++   Counter fu_busy_num = 0;
++   for (uns ii = 0; ii < src_sd->max_op_count; ii++) {
++     Func_Unit* fu = &exec->fus[ii];
++     /*
++      * a functional unit is busy if there's an op in any stage
++      * of its pipeline unless it's stalled by memory
++      */
++     if (fu->idle_cycle > cycle_count) {
++       if (!fu->held_by_mem)
++         exec->fus_busy++;
++     }
++ 
++     if (fu->avail_cycle > cycle_count) {
++       fu_busy_num++;
++     }
++   }
++ 
++   topdown_exec_update(exec->proc_id, fu_busy_num);
++   memview_fus_busy(exec->proc_id, exec->fus_busy);
++ }
++ 
++ /**************************************************************************************/
++ /* Inline Methods */
++ 
++ static inline void exec_stage_inc_power_stats(Op* op) {
++   STAT_EVENT(op->proc_id, POWER_ROB_READ);
++   STAT_EVENT(op->proc_id, POWER_ROB_WRITE);
++ 
++   STAT_EVENT(op->proc_id, POWER_OP);
++ 
++   if (op->inst_info->table_info.op_type > OP_NOP && op->inst_info->table_info.op_type < OP_FLD) {
++     STAT_EVENT(op->proc_id, POWER_INT_OP);
++   } else if (op->inst_info->table_info.op_type >= OP_FLD) {
++     STAT_EVENT(op->proc_id, POWER_FP_OP);
++   }
++ 
++   if (op->inst_info->table_info.mem_type == MEM_LD || op->inst_info->table_info.mem_type == MEM_PF) {
++     STAT_EVENT(op->proc_id, POWER_LD_OP);
++   } else if (op->inst_info->table_info.mem_type == MEM_ST) {
++     STAT_EVENT(op->proc_id, POWER_ST_OP);
++   }
++ 
++   if (!op->off_path) {
++     STAT_EVENT(op->proc_id, POWER_COMMITTED_OP);
++ 
++     if (op->inst_info->table_info.op_type > OP_NOP && op->inst_info->table_info.op_type < OP_FLD) {
++       STAT_EVENT(op->proc_id, POWER_COMMITTED_INT_OP);
++     } else {
++       STAT_EVENT(op->proc_id, POWER_COMMITTED_FP_OP);
++     }
++   }
++ 
++   if (op->inst_info->table_info.cf_type == CF_CALL || op->inst_info->table_info.cf_type == CF_ICALL) {
++     STAT_EVENT(op->proc_id, POWER_FUNCTION_CALL);
++   }
++ 
++   if (op->inst_info->table_info.cf_type > NOT_CF) {
++     STAT_EVENT(op->proc_id, POWER_BRANCH_OP);
++   }
++ 
++   if (power_get_fu_type(op->inst_info->table_info.op_type, op->inst_info->table_info.is_simd) != POWER_FU_FPU) {
++     /* Integer instructions */
++     INC_STAT_EVENT(op->proc_id, POWER_RENAME_READ, 2);
++     STAT_EVENT(op->proc_id, POWER_RENAME_WRITE);
++ 
++     STAT_EVENT(op->proc_id, POWER_INST_WINDOW_READ);
++     STAT_EVENT(op->proc_id, POWER_INST_WINDOW_WRITE);
++     STAT_EVENT(op->proc_id, POWER_INST_WINDOW_WAKEUP_ACCESS);
++ 
++     INC_STAT_EVENT(op->proc_id, POWER_INT_REGFILE_READ, op->inst_info->table_info.num_src_regs);
++     INC_STAT_EVENT(op->proc_id, POWER_INT_REGFILE_WRITE, op->inst_info->table_info.num_dest_regs);
++ 
++     if (power_get_fu_type(op->inst_info->table_info.op_type, op->inst_info->table_info.is_simd) == POWER_FU_MUL_DIV) {
++       INC_STAT_EVENT(op->proc_id, POWER_MUL_ACCESS, abs(op_type_delays[op->inst_info->table_info.type]));
++       STAT_EVENT(op->proc_id, POWER_CDB_MUL_ACCESS);
++     } else {
++       INC_STAT_EVENT(op->proc_id, POWER_IALU_ACCESS, abs(op_type_delays[op->inst_info->table_info.type]));
++       STAT_EVENT(op->proc_id, POWER_CDB_IALU_ACCESS);
++     }
++   } else {
++     /*Floating Point instructions*/
++     STAT_EVENT(op->proc_id, POWER_FP_RENAME_WRITE);
++     INC_STAT_EVENT(op->proc_id, POWER_FP_RENAME_READ, 2);
++ 
++     STAT_EVENT(op->proc_id, POWER_FP_INST_WINDOW_READ);
++     STAT_EVENT(op->proc_id, POWER_FP_INST_WINDOW_WRITE);
++     STAT_EVENT(op->proc_id, POWER_FP_INST_WINDOW_WAKEUP_ACCESS);
++ 
++     INC_STAT_EVENT(op->proc_id, POWER_FP_REGFILE_READ, op->inst_info->table_info.num_src_regs);
++     INC_STAT_EVENT(op->proc_id, POWER_FP_REGFILE_WRITE, op->inst_info->table_info.num_dest_regs);
++ 
++     INC_STAT_EVENT(op->proc_id, POWER_FPU_ACCESS, abs(op_type_delays[op->inst_info->table_info.type]));
++     STAT_EVENT(op->proc_id, POWER_CDB_FPU_ACCESS);
++   }
++ 
++   if (op->inst_info->table_info.mem_type == MEM_ST) {
++     STAT_EVENT(op->proc_id, POWER_DTLB_ACCESS);
++   }
++ }
++ 
++ static inline void exec_stage_dep_wakeup(Op* op) {
++   Counter exec_cycle = cycle_count + abs(op->inst_info->latency);
++ 
++   // non-memory ops will always distribute their results after the op's latency
++   if (op->inst_info->table_info.mem_type == NOT_MEM) {
++     op->wake_cycle = exec_cycle;
++     wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
++     return;
++   }
++ 
++   // stores have their addresses computed in this cycle and also write their data into the store buffer
++   if (op->inst_info->table_info.mem_type == MEM_ST) {
++     // only wake up if this is the first time this op executes
++     if (op->exec_count == 0) {
++       op->wake_cycle = exec_cycle;
++       wake_up_ops(op, MEM_ADDR_DEP, model->wake_hook);
++       wake_up_ops(op, MEM_DATA_DEP, model->wake_hook);
++     }
++     return;
++   }
++ 
++   // all other ops (loads) will be handled by the memory system
++ }
++ 
++ static inline void exec_stage_reject_op(Stage_Data* src_sd, int ii, int event) {
++   Op* op = src_sd->ops[ii];
++ 
++   issue_queue_reject(op);
++   src_sd->ops[ii] = NULL;
++   src_sd->op_count--;
++ 
++   ASSERT(exec->proc_id, event == FU_UNAVAILABLE || event == FU_MEM_UNAVAILABLE || event == FU_OTHER_UNAVAILABLE);
++   STAT_EVENT(exec->proc_id, event);
++ 
++   if (event == FU_OTHER_UNAVAILABLE)
++     return;
++ 
++   int simd_stat_base = op->inst_info->table_info.is_simd ? FU_REJECTED_OP_INV_SIMD : FU_REJECTED_OP_INV_NOT_SIMD;
++   STAT_EVENT(exec->proc_id, simd_stat_base + op->inst_info->table_info.op_type);
++ }
++ 
++ static inline void exec_stage_clear_fu(int ii) {
++   exec->sd.ops[ii] = NULL;
++   exec->sd.op_count--;
++   ASSERT(exec->proc_id, exec->sd.op_count >= 0);
++ }
++ 
++ static inline int exec_stage_check_fu_available(int ii) {
++   /* check whether the functional unit is busy first */
++   // if the FU is not available, then nullify node stage entry to make instruction get scheduled again
++   Func_Unit* fu = &exec->fus[ii];
++   if (cycle_count < fu->avail_cycle) {
++     return FU_UNAVAILABLE;
++   }
++ 
++   /* if the functional unit is not busy, check the op assigned to it */
++   // if no operation is occupying the FU, return that the FU is available
++   Op* fop = exec->sd.ops[ii];
++   if (!fop) {
++     return 0;
++   }
++ 
++   // remove non-mem op currently in the FU
++   if (!fop->inst_info->table_info.mem_type) {
++     return 0;
++   }
++ 
++   // need to kill it if it is a simultaneous replay
++   if (fop->replay && fop->replay_cycle == cycle_count) {
++     STAT_EVENT(exec->proc_id, FU_REPLAY);
++     return 0;
++   }
++ 
++   // memory stall
++   return FU_MEM_UNAVAILABLE;
++ }
++ 
++ static inline void exec_stage_process_op(Op* op) {
++   // set the op's state to reflect it's execution
++   if (op->inst_info->table_info.mem_type == NOT_MEM || STALL_ON_WAIT_MEM) {
++     op->state = OS_SCHEDULED;
++   } else {
++     // mem op may fail if it misses and can't get a mem req buffer
++     op->state = OS_TENTATIVE;
++   }
++ 
++   op->exec_cycle = cycle_count + abs(op->inst_info->latency);
++   op->exec_count++;
++   if (op->inst_info->table_info.mem_type == NOT_MEM)
++     op->done_cycle = op->exec_cycle;
++ 
++   STAT_EVENT(op->proc_id, EXEC_ON_PATH_INST + op->off_path);
++   STAT_EVENT(op->proc_id, EXEC_ON_PATH_INST_MEM + (op->inst_info->table_info.mem_type == NOT_MEM) + 2 * op->off_path);
++   STAT_EVENT(op->proc_id, EXEC_ALL_INST);
++ 
++   DEBUG(exec->proc_id, "op_num:%s fu_num:%d exec_cycle:%s done_cycle:%s off_path:%d\n", unsstr64(op->op_num),
++         op->fu_num, unsstr64(op->exec_cycle), unsstr64(op->done_cycle), op->off_path);
++ }
++ 
++ static inline void exec_stage_bp_resolve(Op* op) {
++   if (!BP_UPDATE_AT_RETIRE) {
++     // this code updates the branch prediction structures
++     if (op->inst_info->table_info.cf_type >= CF_IBR)
++       bp_target_known_op(g_bp_data, op);
++ 
++     bp_resolve_op(g_bp_data, op);
++   }
++ 
+   if (op->bp_pred_info->recover_at_exec) {
+     DEBUG(exec->proc_id, "Exec schedules recovery for op_num:%llu at cycle:%llu\n", (unsigned long long)op->op_num,
+           (unsigned long long)op->exec_cycle);
+-    bp_stat_main_branch_resolve_latency(op, op->exec_cycle, TRUE);
++    if (!(op->ifuse_flush_op && op->eom))
++      bp_stat_main_branch_resolve_latency(op, op->exec_cycle, TRUE);
+     bp_sched_recovery(bp_recovery_info, op, op->exec_cycle);
+-    if (!op->off_path)
+-      op->recovery_scheduled = TRUE;
+-
+-    // stats for the reason of resteer
+-    STAT_EVENT(op->proc_id, RESTEER_RECOVER_AT_EXEC_NOT_CF + op->inst_info->table_info.cf_type);
+-  }
+-
+-#if 0
+-  if (op->inst_info->table_info.cf_type >= CF_IBR && OP_CF_BTB_PRED_INFO(op)->no_target) {
+-    ASSERT(bp_recovery_info->proc_id, bp_recovery_info->proc_id == op->proc_id);
+-    bp_sched_redirect(bp_recovery_info, op, op->exec_cycle);
+-    // stats for the reason of resteer
+-    STAT_EVENT(op->proc_id,
+-                RESTEER_NO_TARGET_CF_IBR + op->inst_info->table_info.cf_type - CF_IBR);
+-    ASSERT(0, 0);
+-  }
+-#endif
+-}
++     if (!op->off_path)
++       op->recovery_scheduled = TRUE;
++ 
++     // stats for the reason of resteer
++     STAT_EVENT(op->proc_id, RESTEER_RECOVER_AT_EXEC_NOT_CF + op->inst_info->table_info.cf_type);
++   }
++ 
++ #if 0
++   if (op->inst_info->table_info.cf_type >= CF_IBR && OP_CF_BTB_PRED_INFO(op)->no_target) {
++     ASSERT(bp_recovery_info->proc_id, bp_recovery_info->proc_id == op->proc_id);
++     bp_sched_redirect(bp_recovery_info, op, op->exec_cycle);
++     // stats for the reason of resteer
++     STAT_EVENT(op->proc_id,
++                 RESTEER_NO_TARGET_CF_IBR + op->inst_info->table_info.cf_type - CF_IBR);
++     ASSERT(0, 0);
++   }
++ #endif
++ }
+diff --git a/src/frontend/frontend.c b/src/frontend/frontend.c
+index 5b98c0da..b5aa93d3 100644
+--- a/src/frontend/frontend.c
++++ b/src/frontend/frontend.c
+@@ -123,11 +123,24 @@ void frontend_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr)
+   frontend->redirect(proc_id, bp_id, inst_uid, fetch_addr);
+ }
+ 
+-void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
++void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                      Flag ifuse_recovery) {
+   DEBUG(proc_id, "Recover after inst_uid %lld\n", inst_uid);
+ 
+   /* Recover to correct path */
+-  frontend->recover(proc_id, bp_id, inst_uid);
++  frontend->recover(proc_id, bp_id, inst_uid, fetch_addr, ifuse_recovery);
++}
++
++void frontend_seek_onpath(uns proc_id, Addr fetch_addr) {
++#ifdef ENABLE_PT_MEMTRACE
++  if (FRONTEND == FE_PT || FRONTEND == FE_MEMTRACE) {
++    extern void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr);
++    ext_trace_seek_onpath(proc_id, fetch_addr);
++    return;
++  }
++#endif
++  (void)proc_id;
++  (void)fetch_addr;
+ }
+ 
+ void frontend_retire(uns proc_id, uns64 inst_uid) {
+diff --git a/src/frontend/frontend.h b/src/frontend/frontend.h
+index 87715254..d81a50c8 100644
+--- a/src/frontend/frontend.h
++++ b/src/frontend/frontend.h
+@@ -54,7 +54,11 @@ void frontend_fetch_op(uns proc_id, uns bp_id, struct Op_struct* op);
+ void frontend_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
+ 
+ /* Recover the front end (restart the right path) */
+-void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid);
++void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                      Flag ifuse_recovery);
++
++/* Reposition the on-path trace stream (memtrace/pt only) */
++void frontend_seek_onpath(uns proc_id, Addr fetch_addr);
+ 
+ /* Let the frontend know that this instruction is retired) */
+ void frontend_retire(uns proc_id, uns64 inst_uid);
+diff --git a/src/frontend/frontend_intf.h b/src/frontend/frontend_intf.h
+index cfc955cd..d2e50661 100644
+--- a/src/frontend/frontend_intf.h
++++ b/src/frontend/frontend_intf.h
+@@ -60,7 +60,8 @@ typedef struct Frontend_Intf_struct {
+   void (*redirect)(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
+ 
+   /* Recover the front end (restart the right path) */
+-  void (*recover)(uns proc_id, uns bp_id, uns64 inst_uid);
++  void (*recover)(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                  Flag ifuse_recovery);
+ 
+   /* Let the frontend know that this instruction is retired) */
+   void (*retire)(uns proc_id, uns64 inst_uid);
+diff --git a/src/frontend/pin_exec_driven_fe.cc b/src/frontend/pin_exec_driven_fe.cc
+index 277b4eae..72bed19d 100644
+--- a/src/frontend/pin_exec_driven_fe.cc
++++ b/src/frontend/pin_exec_driven_fe.cc
+@@ -171,7 +171,8 @@ void pin_exec_driven_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch
+   DEBUG(proc_id, "Fetch Redirect end: %llx\n", fetch_addr);
+ }
+ 
+-void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
++void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid,
++                             Addr fetch_addr, Flag ifuse_recovery) {
+   DEBUG(proc_id, "Fetch Recover: %llu\n", inst_uid);
+   /* PIN will asynchronously recover, Scarab does not need to wait for PIN to
+    * finish. Processes will synchronize when Scarab sends next command to PIN*/
+@@ -195,4 +196,4 @@ void pin_exec_driven_retire(uns proc_id, uns64 inst_uid) {
+ 
+   server->send(proc_id, (Message<Scarab_To_Pin_Msg>)msg);  // blocking
+   DEBUG(proc_id, "Fetch Retire end: %llu\n", inst_uid);
+-}
+\ No newline at end of file
++}
+diff --git a/src/frontend/pin_exec_driven_fe.h b/src/frontend/pin_exec_driven_fe.h
+index 2299bc0b..dba41a32 100644
+--- a/src/frontend/pin_exec_driven_fe.h
++++ b/src/frontend/pin_exec_driven_fe.h
+@@ -58,7 +58,8 @@ void pin_exec_driven_fetch_op(uns proc_id, uns bp_id, struct Op_struct* op);
+ void pin_exec_driven_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
+ 
+ /* Recover pin_exec_driven (restart the right path) */
+-void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid);
++void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid,
++                             Addr fetch_addr, Flag ifuse_recovery);
+ 
+ /* Retire instruction at unique op id */
+ void pin_exec_driven_retire(uns proc_id, uns64 inst_uid);
+diff --git a/src/frontend/pin_trace_fe.c b/src/frontend/pin_trace_fe.c
+index e4f21b68..04faaf7e 100644
+--- a/src/frontend/pin_trace_fe.c
++++ b/src/frontend/pin_trace_fe.c
+@@ -156,7 +156,8 @@ void trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr) {
+               "FETCH_OFF_PATH_OPS\n");
+ }
+ 
+-void trace_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
++void trace_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                   Flag ifuse_recovery) {
+   FATAL_ERROR(proc_id,
+               "Trace frontend does not support wrong path. Turn off "
+               "FETCH_OFF_PATH_OPS\n");
+diff --git a/src/frontend/pin_trace_fe.h b/src/frontend/pin_trace_fe.h
+index 6e33ac97..64f55425 100644
+--- a/src/frontend/pin_trace_fe.h
++++ b/src/frontend/pin_trace_fe.h
+@@ -48,7 +48,8 @@ Addr trace_next_fetch_addr(uns proc_id);
+ Flag trace_can_fetch_op(uns proc_id, uns bp_id);
+ void trace_fetch_op(uns proc_id, uns bp_id, Op* op);
+ void trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
+-void trace_recover(uns proc_id, uns bp_id, uns64 inst_uid);
++void trace_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                   Flag ifuse_recovery);
+ void trace_retire(uns proc_id, uns64 inst_uid);
+ 
+ /* For restarting of traces */
+diff --git a/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc b/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc
+index 3d19255e..f7f78dfb 100644
+--- a/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc
++++ b/src/frontend/pt_memtrace/memtrace_trace_reader_memtrace.cc
+@@ -903,7 +903,10 @@ void TraceReaderMemtrace::processDrIsaInst(InstInfo* _info, bool has_another_mem
+     ctype_inst_map.erase(mt_ref_.instr.addr);
+   }
+   auto ctype_inst_iter = ctype_inst_map.find(mt_ref_.instr.addr);
+-  if (mt_ref_.instr.encoding_is_new) {
++  // Match processInst(): encoding_is_new can be false on a PC's first Scarab
++  // visit when the reader reuses a cached encoding (e.g., after chunk
++  // boundaries in filtered traces).
++  if (mt_ref_.instr.encoding_is_new || ctype_inst_iter == ctype_inst_map.end()) {
+     assert(predecoded != nullptr);
+     ctype_pin_inst cinst = {};
+ 
+@@ -914,7 +917,6 @@ void TraceReaderMemtrace::processDrIsaInst(InstInfo* _info, bool has_another_mem
+                            std::make_tuple(cinst.num_ld + cinst.num_st, false, cinst.cf_type, false, cinst));
+     ctype_inst_iter = ctype_inst_map.find(mt_ref_.instr.addr);
+   } else {
+-    assert(ctype_inst_iter != ctype_inst_map.end());
+     std::get<MAP_XED>(ctype_inst_iter->second).encoding_is_new = mt_ref_.instr.encoding_is_new;
+   }
+ 
+diff --git a/src/frontend/pt_memtrace/trace_fe.cc b/src/frontend/pt_memtrace/trace_fe.cc
+index 924ae513..8ef2e738 100644
+--- a/src/frontend/pt_memtrace/trace_fe.cc
++++ b/src/frontend/pt_memtrace/trace_fe.cc
+@@ -1,6 +1,7 @@
+ #include "trace_fe.h"
+ 
+ #include <cstring>
++#include <deque>
+ #include <fstream>
+ #include <iomanip>
+ #include <iostream>
+@@ -42,6 +43,9 @@ static ctype_pin_inst next_offpath_pi[MAX_NUM_PROCS][MAX_NUM_BPS];
+ static bool off_path_mode[MAX_NUM_PROCS][MAX_NUM_BPS] = {};
+ static uint64_t off_path_addr[MAX_NUM_PROCS][MAX_NUM_BPS] = {};
+ static std::unordered_map<uint64_t, ctype_pin_inst> pc_to_inst[MAX_NUM_PROCS];
++/* After a pc_to_inst reposition, memtrace may still be ahead. Advance via the
++ * map until resynced. */
++static Flag onpath_advance_via_map[MAX_NUM_PROCS] = {};
+ 
+ /* Per-core circular buffer state */
+ struct TraceBufState {
+@@ -220,6 +224,14 @@ void trace_buf_init() {
+ }
+ 
+ int trace_read(int proc_id, ctype_pin_inst *next_onpath_pi) {
++  /*
++   * The underlying PT/MEMTRACE readers are one-way streams. Recovery helpers
++   * may probe fetch again while the final exit op is draining, but once EOF is
++   * recorded there is no next instruction to decode.
++   */
++  if (trace_read_done[proc_id])
++    return 0;
++
+   if (!TRACE_BUF_SIZE) {
+     if (FRONTEND == FE_PT)
+       return pt_trace_read(proc_id, next_onpath_pi);
+@@ -240,6 +252,113 @@ int trace_read(int proc_id, ctype_pin_inst *next_onpath_pi) {
+   return ret;
+ }
+ 
++void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr);
++
++static Addr ext_trace_onpath_next_pc(const ctype_pin_inst& inst) {
++  if (inst.instruction_next_addr)
++    return inst.instruction_next_addr;
++  return inst.instruction_addr + inst.size;
++}
++
++static void ext_trace_pc_to_inst_update(uns proc_id, const ctype_pin_inst& inst) {
++  const uint64_t addr = inst.instruction_addr;
++  auto find = pc_to_inst[proc_id].find(addr);
++  if (find == pc_to_inst[proc_id].end()) {
++    pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, inst));
++  } else if (inst.encoding_is_new) {
++    STAT_EVENT(proc_id, INST_MAP_UPDATE_ENCODING);
++    pc_to_inst[proc_id].erase(addr);
++    pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, inst));
++  } else if (inst.inst_binary_lsb != find->second.inst_binary_lsb ||
++             inst.inst_binary_msb != find->second.inst_binary_msb) {
++    STAT_EVENT(proc_id, INST_MAP_UPDATE_JITTED);
++    pc_to_inst[proc_id].erase(addr);
++    pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, inst));
++  } else if (inst.instruction_next_addr != find->second.instruction_next_addr) {
++    ASSERT(proc_id, inst.op_type == find->second.op_type);
++    if (inst.cf_type)
++      ASSERT(proc_id, inst.cf_type == find->second.cf_type);
++    STAT_EVENT(proc_id, INST_MAP_UPDATE_NPC_INV + inst.op_type);
++    pc_to_inst[proc_id].erase(addr);
++    pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, inst));
++  } else if (!ctype_pin_inst_same_mem_vaddr(inst, find->second)) {
++    ASSERT(proc_id, inst.op_type == find->second.op_type);
++    STAT_EVENT(proc_id, INST_MAP_UPDATE_MEM_INV + inst.op_type);
++    pc_to_inst[proc_id].erase(addr);
++    pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, inst));
++  } else if (DEBUG_TRACE_READ && DEBUG_RANGE_COND(proc_id)) {
++    assert_ctype_pin_inst_same(proc_id, inst, find->second);
++  }
++}
++
++static void ext_trace_drain_stream_until(uns proc_id, Addr fetch_addr) {
++  ctype_pin_inst tmp;
++  while (!trace_read_done[proc_id]) {
++    if (!trace_read(proc_id, &tmp))
++      return;
++    ext_trace_pc_to_inst_update(proc_id, tmp);
++    if (tmp.instruction_addr == fetch_addr)
++      return;
++    if (tmp.instruction_addr > fetch_addr) {
++      onpath_advance_via_map[proc_id] = TRUE;
++      return;
++    }
++  }
++}
++
++static void ext_trace_position_onpath(uns proc_id, Addr fetch_addr) {
++  auto find = pc_to_inst[proc_id].find(fetch_addr);
++  ASSERTM(proc_id, find != pc_to_inst[proc_id].end(),
++          "On-path position 0x%llx is not in the trace frontend map\n", (unsigned long long)fetch_addr);
++  next_onpath_pi[proc_id] = find->second;
++  onpath_advance_via_map[proc_id] = FALSE;
++  ext_trace_drain_stream_until(proc_id, fetch_addr);
++}
++
++static void ext_trace_advance_onpath_after_eom(uns proc_id, Op* op) {
++  const ctype_pin_inst completed = next_onpath_pi[proc_id];
++  const Addr next_addr = ext_trace_onpath_next_pc(completed);
++
++  if (onpath_advance_via_map[proc_id]) {
++    auto find = pc_to_inst[proc_id].find(next_addr);
++    if (find != pc_to_inst[proc_id].end()) {
++      next_onpath_pi[proc_id] = find->second;
++    } else {
++      onpath_advance_via_map[proc_id] = FALSE;
++      ext_trace_seek_onpath(proc_id, next_addr);
++      return;
++    }
++    while (!trace_read_done[proc_id]) {
++      ctype_pin_inst tmp;
++      if (!trace_read(proc_id, &tmp)) {
++        trace_read_done[proc_id] = TRUE;
++        reached_exit[proc_id] = TRUE;
++        op->exit = TRUE;
++        return;
++      }
++      ext_trace_pc_to_inst_update(proc_id, tmp);
++      if (tmp.instruction_addr == next_addr) {
++        next_onpath_pi[proc_id] = tmp;
++        onpath_advance_via_map[proc_id] = FALSE;
++        return;
++      }
++      if (tmp.instruction_addr > next_addr)
++        break;
++    }
++    onpath_advance_via_map[proc_id] = TRUE;
++    return;
++  }
++
++  int success = trace_read(proc_id, &next_onpath_pi[proc_id]);
++  if (!success) {
++    trace_read_done[proc_id] = TRUE;
++    reached_exit[proc_id] = TRUE;
++    op->exit = TRUE;
++  } else {
++    ext_trace_pc_to_inst_update(proc_id, next_onpath_pi[proc_id]);
++  }
++}
++
+ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
+   // ext_trace_redirect should be called before fetching from the secondary fetch
+   bool off_path_mode_ = off_path_mode[proc_id][bp_id];
+@@ -258,53 +377,7 @@ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
+ 
+   if (uop_generator_get_eom(proc_id)) {
+     if (!off_path_mode_) {
+-      int success = false;
+-      success = trace_read(proc_id, &next_onpath_pi[proc_id]);
+-      if (!success) {
+-        trace_read_done[proc_id] = TRUE;
+-        reached_exit[proc_id] = TRUE;
+-        op->exit = TRUE;
+-      } else {
+-        uint64_t addr = next_onpath_pi[proc_id].instruction_addr;
+-        auto find = pc_to_inst[proc_id].find(addr);
+-        if (find == pc_to_inst[proc_id].end()) {
+-          pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, next_onpath_pi[proc_id]));
+-        } else if (next_onpath_pi[proc_id].encoding_is_new) {
+-          STAT_EVENT(proc_id, INST_MAP_UPDATE_ENCODING);
+-          pc_to_inst[proc_id].erase(addr);
+-          pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, next_onpath_pi[proc_id]));
+-        } else if (next_onpath_pi[proc_id].inst_binary_lsb != find->second.inst_binary_lsb ||
+-                   next_onpath_pi[proc_id].inst_binary_msb != find->second.inst_binary_msb) {
+-          DEBUG(proc_id, "Previously seen PC references new instruction addr:%lx inst_size:%i lsb:%lx msb:%lx\n ", addr,
+-                next_onpath_pi[proc_id].size, next_onpath_pi[proc_id].inst_binary_lsb,
+-                next_onpath_pi[proc_id].inst_binary_msb);
+-          // Handle jitted code
+-          STAT_EVENT(proc_id, INST_MAP_UPDATE_JITTED);
+-          pc_to_inst[proc_id].erase(addr);
+-          pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, next_onpath_pi[proc_id]));
+-        } else if (next_onpath_pi[proc_id].instruction_next_addr != find->second.instruction_next_addr) {
+-          ASSERT(proc_id, next_onpath_pi[proc_id].op_type == find->second.op_type);
+-          if (next_onpath_pi[proc_id].cf_type) {
+-            ASSERT(proc_id, next_onpath_pi[proc_id].cf_type == find->second.cf_type);
+-            // This can fail for java pt traces
+-            // ASSERT(proc_id, next_onpath_pi[proc_id].cf_type == CF_CBR ||
+-            //                 next_onpath_pi[proc_id].cf_type >= CF_IBR ||
+-            //                 next_onpath_pi[proc_id].last_inst_from_trace);
+-          }
+-          STAT_EVENT(proc_id, INST_MAP_UPDATE_NPC_INV + next_onpath_pi[proc_id].op_type);
+-          pc_to_inst[proc_id].erase(addr);
+-          pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, next_onpath_pi[proc_id]));
+-        } else if (!ctype_pin_inst_same_mem_vaddr(next_onpath_pi[proc_id], find->second)) {
+-          ASSERT(proc_id, next_onpath_pi[proc_id].op_type == find->second.op_type);
+-          STAT_EVENT(proc_id, INST_MAP_UPDATE_MEM_INV + next_onpath_pi[proc_id].op_type);
+-          pc_to_inst[proc_id].erase(addr);
+-          pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, next_onpath_pi[proc_id]));
+-        } else {
+-          if (DEBUG_TRACE_READ && DEBUG_RANGE_COND(proc_id)) {
+-            assert_ctype_pin_inst_same(proc_id, next_onpath_pi[proc_id], find->second);
+-          }
+-        }
+-      }
++      ext_trace_advance_onpath_after_eom(proc_id, op);
+     } else {
+       off_path_generate_inst(proc_id, off_path_addr_, next_offpath_pi_);
+     }
+@@ -315,7 +388,7 @@ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
+ 
+ Flag ext_trace_can_fetch_op(uns proc_id, uns bp_id) {
+   if (!bp_id && !off_path_mode[proc_id])
+-    return !(uop_generator_get_eom(proc_id) && trace_read_done[proc_id]);
++    return !trace_read_done[proc_id];
+   else if (bp_id && !off_path_mode[proc_id][bp_id])
+     return FALSE;
+   else
+@@ -334,11 +407,34 @@ void ext_trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr)
+         next_offpath_pi[proc_id][bp_id].instruction_addr);
+ }
+ 
+-void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
++void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                       Flag ifuse_recovery) {
+   Op dummy_op;
+   dummy_op.bp_pred_l0 = {};
+   dummy_op.bp_pred_main = {};
+   dummy_op.btb_pred = {};
++
++  /*
++   * I-Fuse fetch-time redirect starts a separate speculative stream after the
++   * failed LD2. Fetching LD2 already advanced next_onpath_pi to its
++   * fall-through, so recovery only needs to discard that speculative stream.
++   * Seeking here would read the one-way memtrace stream again and permanently
++   * skip instructions each time an I-Fuse misprediction is recovered.
++   */
++  if (ifuse_recovery && fetch_addr && bp_id == 0) {
++    off_path_mode[proc_id][bp_id] = false;
++    off_path_addr[proc_id][bp_id] = 0;
++    next_offpath_pi[proc_id][bp_id] = {};
++    while (!uop_generator_get_eom(proc_id)) {
++      uop_generator_get_uop(proc_id, &dummy_op, &next_offpath_pi[proc_id][bp_id]);
++    }
++    ASSERTM(proc_id, next_onpath_pi[proc_id].instruction_addr == fetch_addr,
++            "IFuse recovery cursor 0x%llx does not match fall-through 0x%llx\n",
++            (unsigned long long)next_onpath_pi[proc_id].instruction_addr,
++            (unsigned long long)fetch_addr);
++    return;
++  }
++
+   if (bp_id) {
+     off_path_addr[proc_id][bp_id] = 0;
+     next_offpath_pi[proc_id][bp_id] = {};
+@@ -361,7 +457,38 @@ Addr ext_trace_next_fetch_addr(uns proc_id) {
+   return next_onpath_pi[proc_id].instruction_addr;
+ }
+ 
++void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr) {
++  off_path_mode[proc_id][0] = false;
++  auto find = pc_to_inst[proc_id].find(fetch_addr);
++  if (find != pc_to_inst[proc_id].end()) {
++    ext_trace_position_onpath(proc_id, fetch_addr);
++    return;
++  }
++  onpath_advance_via_map[proc_id] = FALSE;
++  while (!trace_read_done[proc_id]) {
++    if (!trace_read(proc_id, &next_onpath_pi[proc_id]))
++      break;
++    ext_trace_pc_to_inst_update(proc_id, next_onpath_pi[proc_id]);
++    if (next_onpath_pi[proc_id].instruction_addr == fetch_addr)
++      return;
++  }
++  ASSERTM(proc_id, next_onpath_pi[proc_id].instruction_addr == fetch_addr,
++          "On-path seek to 0x%llx stopped at 0x%llx\n", (unsigned long long)fetch_addr,
++          (unsigned long long)next_onpath_pi[proc_id].instruction_addr);
++}
++
+ void ext_trace_init() {
++  for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
++    /*
++     * Scarab initializes the frontend once for warmup and again for measured
++     * simulation. EOF belongs to one frontend lifetime. Carrying it into the
++     * next phase would make trace_read() reject the first measured fetch.
++     */
++    trace_read_done[proc_id] = FALSE;
++    reached_exit[proc_id] = FALSE;
++    onpath_advance_via_map[proc_id] = FALSE;
++  }
++
+   for (uns i = 0; i < MAX_NUM_PROCS; i++) {
+     init_ctype_pin_inst(&next_onpath_pi[i]);
+     for (uns j = 0; j < MAX_NUM_BPS; j++)
+diff --git a/src/frontend/pt_memtrace/trace_fe.h b/src/frontend/pt_memtrace/trace_fe.h
+index ea3c71c8..83ebeceb 100644
+--- a/src/frontend/pt_memtrace/trace_fe.h
++++ b/src/frontend/pt_memtrace/trace_fe.h
+@@ -54,10 +54,12 @@ Flag buf_map_find(uns proc_id, Addr line_addr);
+ 
+ /* Implementing the frontend interface */
+ Addr ext_trace_next_fetch_addr(uns proc_id);
++void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr);
+ Flag ext_trace_can_fetch_op(uns proc_id, uns bp_id);
+ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op);
+ void ext_trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
+-void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid);
++void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
++                       Flag ifuse_recovery);
+ void ext_trace_retire(uns proc_id, uns64 inst_uid);
+ void ext_trace_init();
+ void ext_trace_done(void);
+diff --git a/src/ft.cc b/src/ft.cc
+index 03e5b82f..b7d1c01f 100644
+--- a/src/ft.cc
++++ b/src/ft.cc
+@@ -27,6 +27,7 @@
+ 
+ #include "ft.h"
+ 
++#include <algorithm>
+ #include <cstdio>
+ #include <functional>
+ #include <iostream>
+@@ -38,14 +39,23 @@
+ #include "memory/memory.param.h"
+ 
+ extern "C" {
+-#include "bp/bp_targ_mech.h"
+-#include "frontend/frontend.h"
+-}
++  #include "bp/bp_targ_mech.h"
++  #include "frontend/frontend.h"
++  #include "ifuse/ifuse_aci.h"
++  #include "ifuse/ifuse_apt.h"
++  #include "ifuse/ifuse_exec_pair.h"
++  #include "ifuse/ifuse_fct.h"
++  #include "ifuse/ifuse_load_tracker.h"
++  #include "ifuse/ifuse_store_window.h"
++  #include "ifuse/ifuse.param.h"
++  }
++
+ #include "frontend/frontend_intf.h"
+ #include "isa/isa_macros.h"
+ 
+ #include "decoupled_frontend.h"
+ #include "op_pool.h"
++#include "statistics.h"
+ #include "uop_cache.h"
+ 
+ #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_DECOUPLED_FE, ##args)
+@@ -64,9 +74,13 @@ FT::~FT() {
+       ft_op->parent_FT = nullptr;
+       free_op(ft_op);
+     }
+-    if (ft_op->parent_FT_off_path) {
++    /*
++     * Recovery can split a saved FT again before an older secondary FT
++     * retires. In that case, the op's secondary owner points at the newer FT,
++     * and deleting the older FT must not clear the newer ownership link.
++     */
++    if (ft_op->parent_FT_off_path == this) {
+       ASSERT(proc_id, !ft_op->off_path);
+-      ASSERT(proc_id, ft_op->parent_FT_off_path == this);
+       ft_op->parent_FT_off_path = nullptr;
+     }
+   }
+@@ -140,7 +154,8 @@ void FT::remove_op_after_exec_recover() {
+ }
+ 
+ FT_Event FT::build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::function<bool(uns8, uns8, Op*)> fetch_op_fn,
+-                   bool off_path, bool conf_off_path, std::function<uint64_t()> get_next_op_id_fn) {
++                   bool off_path, bool conf_off_path, std::function<uint64_t()> get_next_op_id_fn,
++                   Addr required_start_addr) {
+   FT_Event event = FT_EVENT_NONE;
+   do {
+     if (!can_fetch_op_fn(proc_id, bp_id)) {
+@@ -150,13 +165,215 @@ FT_Event FT::build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::functio
+     }
+     Op* op = alloc_op(proc_id);
+     fetch_op_fn(proc_id, bp_id, op);
++    if (required_start_addr && ops.empty() && op->inst_info->addr != required_start_addr) {
++      free_op(op);
++      continue;
++    }
+     op->off_path = off_path;
+     op->conf_off_path = conf_off_path;
+     collect_op_stats(op);
+     op->op_num = get_next_op_id_fn();
++
++    // Initialize I-Fuse per-op metadata
++    op->ifuse_load_role = NOT_FUSION_CANDIDATE;
++    op->ifuse_partner_op_num = 0;
++    op->ifuse_partner_ld1_pc = 0;
++    op->ifuse_ld2_physical_reg_id = OP_REG_ID_INVALID;
++    op->ifuse_ld2_early_wake_signaled = FALSE;
++    op->ifuse_ld2_agu_completed = FALSE;
++    op->ifuse_ld2_data_cycle = MAX_CTR;
++    op->ifuse_ld2_early_wake_cycle = MAX_CTR;
++    op->ifuse_ld2_prediction_failed = FALSE;
++    op->ifuse_flush_op = FALSE;
++    op->ifuse_pair_distance = 0;
++    op->ifuse_pred_ld2_va = 0;
++    op->ifuse_ld1_dcache_cycle = MAX_CTR;
++    op->ifuse_pmu_ld2_unique_num = 0;
++    op->ifuse_pmu_other_rdy_cycle = 0;
++
++    // Track on-path stores for the RAW check on fused LD2s
++    if (!off_path)
++      ifuse_store_window_note_op(op);
++
++    // I-Fuse load classification path
++    //
++    // Only classify valid on-path loads. Stores and off-path instructions must
++    // not consume live APT entries.
++    if (!off_path && op->inst_info->table_info.mem_type == MEM_LD &&
++        op->oracle_info.va != 0 && op->oracle_info.mem_size != 0) {
++      // Every IFUSE_FUSION_DISTANCE loads, discard predictions whose LD2 is
++      // already more than IFUSE_FUSION_DISTANCE micro-ops past LD1.
++      uint64_t current_load_num = ifuse_next_load_num();
++      if (IFUSE_FUSION_DISTANCE != 0 &&
++          current_load_num % IFUSE_FUSION_DISTANCE == 0) {
++        apt_cleanup_stale(op->op_num);
++        aci_cleanup_stale(op->op_num);
++      }
++
++      // Check whether a prior LD1 expects this load PC to appear as LD2
++      APT_Entry* waiting_pair = apt_lookup(op->inst_info->addr);
++      if (waiting_pair) {
++        STAT_EVENT(proc_id, APT_LOOKUP_HITS);
++      } else {
++        STAT_EVENT(proc_id, APT_LOOKUP_MISSES);
++      }
++
++      if (waiting_pair &&
++          waiting_pair->ld1_micro_op_num >= (unsigned int)op->op_num) {
++        /*
++         * I-Fuse replay can reuse dynamic op numbers while an older APT entry
++         * is still live. LD2 must be strictly younger than its LD1. Otherwise,
++         * this load could claim its own replayed prediction and wait forever
++         * for a completion event that cannot occur.
++         */
++        apt_remove_entry_by_ld1_micro_op(
++            op->inst_info->addr,
++            waiting_pair->ld1_micro_op_num);
++        waiting_pair = nullptr;
++      }
++
++      if (waiting_pair && op->op_num - waiting_pair->ld1_micro_op_num > IFUSE_FUSION_DISTANCE) {
++        // apt_lookup() claims the entry immediately. Reject a claim found just
++        // after its deadline and release LD1's unconsumed extra register.
++        aci_invalidate_prediction(
++            waiting_pair->predicted_ld2_effective_addr,
++            waiting_pair->ld1_micro_op_num);
++        apt_remove_entry_by_ld1_micro_op(
++            op->inst_info->addr,
++            waiting_pair->ld1_micro_op_num);
++        waiting_pair = nullptr;
++      }
++
++      if (waiting_pair) {
++        op->ifuse_load_role = LOAD2;
++        op->ifuse_partner_op_num = waiting_pair->ld1_micro_op_num;
++        op->ifuse_partner_ld1_pc = waiting_pair->ld1_pc_addr;
++        op->ifuse_pair_distance = op->op_num - waiting_pair->ld1_micro_op_num;
++
++        // ACI verifies that LD2 accessed the cache block predicted by LD1.
++        // The matching ACI entry is consumed when validation succeeds.
++        ACI_Result aci_result = aci_check_and_consume_prediction(
++            op->oracle_info.va,
++            waiting_pair->predicted_ld2_effective_addr,
++            waiting_pair->ld1_micro_op_num);
++
++        // ACI validates the cache block. The address and access-size checks
++        // ensure that the complete LD2 prediction is correct.
++        bool ld2_prediction_correct =
++            aci_result == ACI_LOOKUP_MATCH &&
++            op->oracle_info.va == waiting_pair->predicted_ld2_effective_addr &&
++            op->oracle_info.mem_size ==
++                waiting_pair->predicted_ld2_memory_access_size;
++
++        // A store between LD1 and LD2 that writes LD2's bytes makes the
++        // fused value stale. The LSQ catches it and LD2 flushes (paper
++        // Section 4.4), although the address prediction was correct.
++        bool raw_store =
++            ld2_prediction_correct &&
++            ifuse_store_window_overlaps(waiting_pair->ld1_micro_op_num, op->op_num, op->oracle_info.va,
++                                        op->oracle_info.mem_size);
++
++        if (raw_store) {
++          aci_invalidate_prediction(
++              waiting_pair->predicted_ld2_effective_addr,
++              waiting_pair->ld1_micro_op_num);
++          op->ifuse_load_role = PREDICTED_NOT_FUSED;
++          op->ifuse_ld2_prediction_failed = TRUE;
++          STAT_EVENT(proc_id, IFUSE_RAW_STORE_FLUSHES);
++          fct_update_confidence(waiting_pair->ld1_pc_addr, true);
++        } else if (!ld2_prediction_correct) {
++          // ACI lookup consumes the entry only when the actual cache block
++          // matches. Remove any remaining prediction after a failure.
++          aci_invalidate_prediction(
++              waiting_pair->predicted_ld2_effective_addr,
++              waiting_pair->ld1_micro_op_num);
++
++          // Record the failed prediction. Execution models its late discovery
++          // by flushing younger consumers after this LD2 reaches its FU.
++          op->ifuse_load_role = PREDICTED_NOT_FUSED;
++          op->ifuse_ld2_prediction_failed = TRUE;
++          STAT_EVENT(proc_id, IFUSE_INCORRECT_PREDICTIONS);
++          STAT_EVENT(proc_id, IFUSE_MISPREDICTED_LOADS);
++          /*
++           * Cause counters intentionally overlap: predicting the wrong cache
++           * block also means that LD1's stored offset delta produced the wrong
++           * LD2 effective address. A delta mismatch can still remain within
++           * the correct cache block.
++           */
++          if ((op->oracle_info.va >> ACI_CACHE_LINE_BITS) !=
++              (waiting_pair->predicted_ld2_effective_addr >>
++               ACI_CACHE_LINE_BITS)) {
++            STAT_EVENT(proc_id, IFUSE_MISPREDICTED_CACHE_BLOCK_ADDR);
++          }
++          if (op->oracle_info.va !=
++              waiting_pair->predicted_ld2_effective_addr) {
++            STAT_EVENT(proc_id, IFUSE_MISPREDICTED_OFFSET_DELTA);
++          }
++          fct_update_confidence(waiting_pair->ld1_pc_addr, false);
++        } else {
++          STAT_EVENT(proc_id, IFUSE_CORRECT_PREDICTIONS);
++          // Reinforce accurate LD1-to-LD2 predictions
++          fct_update_confidence(waiting_pair->ld1_pc_addr, true);
++        }
++
++      } else {
++        // If this load has a trained FCT entry, classify it as LD1 and predict
++        // LD2.
++        FCT_Row* candidate = fct_lookup(op->inst_info->addr);
++
++        if (candidate) {
++          STAT_EVENT(proc_id, FCT_LOOKUP_HITS);
++          if (candidate->confidence_score > IFUSE_FCT_CONF_THRESHOLD) {
++            STAT_EVENT(proc_id, IFUSE_LOAD1_PREDICTIONS);
++            op->ifuse_load_role = LOAD1;
++
++            Addr predicted_ld2_effective_addr =
++                candidate->direction ?
++                    op->oracle_info.va + candidate->offset_delta :
++                    op->oracle_info.va - candidate->offset_delta;
++            op->ifuse_pred_ld2_va = predicted_ld2_effective_addr;
++
++            // APT records the expected future LD2 PC.
++            APT_Entry* inserted_pair = apt_insert_entry(
++                op->inst_info->addr,
++                op->oracle_info.va,
++                (unsigned int)op->op_num,
++                candidate->ld2_mem_size,
++                candidate->ld2_pc_addr,
++                predicted_ld2_effective_addr);
++
++            // ACI records the predicted LD2 cache block.
++            if (inserted_pair) {
++              aci_insert_prediction(predicted_ld2_effective_addr,
++                                    (unsigned int)op->op_num);
++            }
++          } else {
++            STAT_EVENT(proc_id, FCT_LOOKUP_LOW_CONF);
++          }
++        } else {
++          STAT_EVENT(proc_id, FCT_LOOKUP_MISSES);
++        }
++      }
++
++      apt_observe_live_ld2_predictions(proc_id);
++      ifuse_exec_pair_observe_live_pairs(proc_id);
++    }
++
+     op->bp_pred_main.pred_npc = op->oracle_info.npc;
+     op->bp_pred_main.pred = op->oracle_info.dir;  // for prebuilt, pred is same as dir
+     add_op(op);
++    /*
++     * The I-Fuse LD2 prediction failed. Stop this prebuilt on-path FT at LD2,
++     * but do not redirect yet: lookahead-buffer construction runs ahead of
++     * frontend service. predict_ft() starts the Scarab recovery path only when
++     * this FT is actually selected.
++     */
++    if (!off_path && op->eom && op->ifuse_load_role == PREDICTED_NOT_FUSED &&
++        op->ifuse_ld2_prediction_failed) {
++      op->bp_pred_main.pred_npc =
++          ADDR_PLUS_OFFSET(op->inst_info->addr, op->inst_info->trace_info.inst_size);
++      break;
++    }
+     if (off_path) {
+       bp_predict_btb(g_bp_data, op);
+       if (bp_l0_enabled())
+@@ -173,6 +390,12 @@ FT_Event FT::build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::functio
+       return event;
+     }
+     STAT_EVENT(proc_id, FTQ_FETCHED_INS_ONPATH + off_path);
++    if (ops.size() > 50000) {
++      fprintf(stderr, "[scarab] FT::build stuck off=%u ops=%zu addr=0x%llx eom=%u\n", (unsigned)off_path,
++              ops.size(), (unsigned long long)ops.back()->inst_info->addr, (unsigned)ops.back()->eom);
++      fflush(stderr);
++      ASSERT(proc_id, 0);
++    }
+   } while (get_end_reason() == FT_NOT_ENDED);
+ 
+   generate_ft_info();
+@@ -237,8 +460,12 @@ std::pair<FT*, FT*> FT::extract_off_path_ft(uns split_index) {
+   ASSERT(proc_id, index_uns < ops.size() && index_uns >= 0);
+   ASSERT(proc_id, get_is_prebuilt());
+ 
++  Op* split_op = ops[split_index];
++  if (split_op->eom && split_op->ifuse_flush_op)
++    return {this, nullptr};
++
+   // if split at the last op and FT already ended, no need to create new FT, just update end condition
+-  if (split_index == ops.size() - 1 && get_end_reason() != FT_NOT_ENDED) {
++  if (split_index == ops.size() - 1 && get_end_reason(false) != FT_NOT_ENDED) {
+     generate_ft_info();
+     return {this, nullptr};
+   }
+@@ -259,12 +486,22 @@ std::pair<FT*, FT*> FT::extract_off_path_ft(uns split_index) {
+     ASSERT(0, (index_uns + 1 <= ops.size() - 1 && ops.size() - 1 < ops.size() && index_uns + 1 >= 0));
+ 
+     generate_ft_info();
++    /*
++     * A trailing suffix may end with a latent I-Fuse-failed LD2 after an
++     * earlier branch split. Lookahead classified the load, but predict_ft()
++     * has not consumed it yet. Its temporary flush marker and FT end reason
++     * are therefore deferred until recovery fetch reaches this suffix.
++     */
++    ft_info.dynamic_info.ended_by = get_end_reason(false);
++    const bool has_latent_ifuse_failure =
++        ops.back()->eom && ops.back()->ifuse_load_role == PREDICTED_NOT_FUSED &&
++        ops.back()->ifuse_ld2_prediction_failed;
+ 
+     ASSERT(proc_id, ft_info.static_info.start && ft_info.static_info.length && ops.size());
+     ASSERT(proc_id, ops.size() == (ops.size() - ops.size()) + ops.size());
+     ASSERT(proc_id, ft_info.dynamic_info.first_op_off_path == 0);
+-    ASSERT(proc_id, ft_info.dynamic_info.ended_by != FT_NOT_ENDED);
+-    ASSERT(proc_id, get_end_reason() != FT_NOT_ENDED);
++    ASSERT(proc_id, ft_info.dynamic_info.ended_by != FT_NOT_ENDED || has_latent_ifuse_failure);
++    ASSERT(proc_id, get_end_reason(false) != FT_NOT_ENDED || has_latent_ifuse_failure);
+   } else {
+     off_path_ft->is_prebuilt = 1;
+     this->is_prebuilt = 0;
+@@ -325,10 +562,17 @@ FT_Event FT::predict_op_ft_event(Op* op, Bp_Pred_Level pred_level) {
+     return FT_EVENT_FETCH_BARRIER;
+   }
+ 
++  /* I-Fuse redirect is handled in handle_ifuse_misprediction_flush() at
++   * fetch (like IF). */
++  if (!op->off_path && op->eom && op->ifuse_flush_op && bp_pred_info->recover_at_exec)
++    return FT_EVENT_NONE;
++
+   return FT_EVENT_NONE;
+ }
+ 
+ FT_PredictResult FT::predict_ft() {
++  FT_PredictResult branch_mispred = {0, FT_EVENT_NONE, nullptr, 0};
++
+   for (size_t idx = op_pos; idx < ops.size(); idx++) {
+     Op* op = ops[idx];
+     bp_predict_btb(g_bp_data, op);
+@@ -381,6 +625,15 @@ FT_PredictResult FT::predict_ft() {
+       op_select_bp_pred_info(op, BP_PRED_MAIN);
+     }
+     bp_btb_post_bp_predict(g_bp_data, op);  // for next BTB access
++    /*
++     * Lookahead prebuild only records the failed LD2. Start the temporary
++     * off-path stream when the FT is consumed, just as a branch prediction
++     * affects fetch only when Scarab predicts its FT.
++     */
++    if (!op->off_path && op->eom && op->ifuse_load_role == PREDICTED_NOT_FUSED &&
++        op->ifuse_ld2_prediction_failed) {
++      decoupled_fe_handle_ifuse_misprediction_flush(proc_id, bp_id, op);
++    }
+     if (op->inst_info->table_info.cf_type) {
+       // Per-CF prediction event: now that main's bp_pred_info is finalized for
+       // op (and main's bp_data has just been spec-updated), fire alt-DFE
+@@ -400,10 +653,18 @@ FT_PredictResult FT::predict_ft() {
+     if (event != FT_EVENT_NONE) {
+       uint64_t return_idx = (event == FT_EVENT_MISPREDICT) ? (idx) : 0;
+       Addr pred_addr = op->bp_pred_info->pred_npc;
+-      if (!ended_by_exit())
++      if (!ended_by_exit()) {
++        if (event == FT_EVENT_MISPREDICT) {
++          if (branch_mispred.event == FT_EVENT_NONE)
++            branch_mispred = {return_idx, event, op, pred_addr};
++        }
+         return {return_idx, event, op, pred_addr};
++      }
+     }
+   }
++
++  if (branch_mispred.event != FT_EVENT_NONE)
++    return branch_mispred;
+   return {0, FT_EVENT_NONE, nullptr, 0};
+ }
+ 
+@@ -457,7 +718,7 @@ bool FT::is_consecutive(const FT& previous_ft) const {
+   return matches;
+ }
+ 
+-FT_Ended_By FT::get_end_reason() const {
++FT_Ended_By FT::get_end_reason(bool honor_ifuse_ft_end_suppress) const {
+   if (ops.empty()) {
+     return FT_NOT_ENDED;
+   }
+@@ -467,6 +728,11 @@ FT_Ended_By FT::get_end_reason() const {
+   ASSERT(proc_id, op->op_pool_valid);
+   ASSERT(proc_id, op->inst_info);
+   if (op->eom) {
++    /* Match instruction-fusion flush_op: do not end the FT at a failed I-Fuse
++     * LD2 */
++    if (honor_ifuse_ft_end_suppress && op->ifuse_flush_op)
++      return FT_NOT_ENDED;
++
+     const Bp_Pred_Info* bp_pred_info = ft_active_or_main_bp_pred_info(op);
+     uns offset = ADDR_PLUS_OFFSET(op->inst_info->addr, op->inst_info->trace_info.inst_size) -
+                  ROUND_DOWN(op->inst_info->addr, ICACHE_LINE_SIZE);
+@@ -571,6 +837,28 @@ void ft_free_op(Op* op) {
+     FT* ft = op->parent_FT;
+     std::vector<Op*>& ft_ops = ft->get_ops();
+ 
++    /*
++     * I-Fuse recovery keeps LD2 and flushes only younger ops. If the youngest
++     * flushed op owns the end of its FT, deleting the entire FT would also free
++     * the surviving prefix while backend structures still reference it.
++     */
++    const bool ifuse_ft_has_survivor =
++        std::any_of(ft_ops.begin(), ft_ops.end(),
++                    [](Op* ft_op) { return !FLUSH_OP(ft_op); });
++    if (bp_recovery_info->ifuse_recovery && FLUSH_OP(op) &&
++        ifuse_ft_has_survivor) {
++      while (!ft_ops.empty() && FLUSH_OP(ft_ops.back())) {
++        Op* tail = ft_ops.back();
++        ft_ops.pop_back();
++        tail->parent_FT = nullptr;
++        free_op(tail);
++      }
++      ft->op_pos = 0;
++      ft->generate_ft_info();
++      ft->op_pos = ft_ops.size();
++      return;
++    }
++
+     Flag has_on_path = FALSE;
+     Flag has_off_path = FALSE;
+     for (Op* ft_op : ft_ops) {
+diff --git a/src/ft.h b/src/ft.h
+index 26c2981b..2a799577 100644
+--- a/src/ft.h
++++ b/src/ft.h
+@@ -116,7 +116,8 @@ struct FT {
+ 
+   // Change return type to FT_BuildResult
+   FT_Event build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::function<bool(uns8, uns8, Op*)> fetch_op_fn,
+-                 bool off_path, bool conf_off_path, std::function<uint64_t()> get_next_op_id_fn);
++                 bool off_path, bool conf_off_path, std::function<uint64_t()> get_next_op_id_fn,
++                 Addr required_start_addr = 0);
+   void remove_op_after_exec_recover();
+ 
+   FT_PredictResult predict_ft();
+@@ -139,7 +140,7 @@ struct FT {
+ 
+   std::set<Addr> get_pcs();
+ 
+-  FT_Ended_By get_end_reason() const;
++  FT_Ended_By get_end_reason(bool honor_ifuse_ft_end_suppress = true) const;
+   void clear_recovery_info();
+ 
+  private:
+diff --git a/src/ft_op_buffer.cc b/src/ft_op_buffer.cc
+index b0d897a3..723a875e 100644
+--- a/src/ft_op_buffer.cc
++++ b/src/ft_op_buffer.cc
+@@ -2,6 +2,8 @@
+ 
+ #include <vector>
+ 
++#include "ifuse/ifuse_recovery.h"
++
+ #include "globals/assert.h"
+ #include "globals/utils.h"
+ 
+@@ -95,7 +97,8 @@ void recover_ft_op_buffer(Icache_Stage* ic) {
+       DEBUG(ic->proc_id, "Icache buffer flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
+             op->off_path);
+       flushed = TRUE;
+-      ASSERT(ic->proc_id, op->off_path);
++      ASSERT(ic->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                          ifuse_recovery_is_flushing());
+       ASSERT(ic->proc_id, op->parent_FT);
+       ft_free_op(op);
+     } else {
+diff --git a/src/icache_stage.c b/src/icache_stage.c
+index 71830bf6..90f5ab0d 100644
+--- a/src/icache_stage.c
++++ b/src/icache_stage.c
+@@ -62,6 +62,7 @@
+ #include "decode_stage.h"
+ #include "ft.h"
+ #include "ft_op_buffer.h"
++#include "ifuse/ifuse_recovery.h"
+ #include "map.h"
+ #include "op_pool.h"
+ #include "sim.h"
+@@ -248,7 +249,8 @@ void recover_icache_stage() {
+         DEBUG(ic->proc_id, "Icache flushing op_num:%llu off_path:%u\n", (unsigned long long)cur_data->ops[ii]->op_num,
+               cur_data->ops[ii]->off_path);
+         flushed = TRUE;
+-        ASSERT(ic->proc_id, cur_data->ops[ii]->off_path);
++        ASSERT(ic->proc_id, cur_data->ops[ii]->off_path || bp_recovery_info->ifuse_recovery ||
++                                ifuse_recovery_is_flushing());
+         if (cur_data->ops[ii]->parent_FT)
+           ft_free_op(cur_data->ops[ii]);
+         cur_data->ops[ii] = NULL;
+@@ -642,7 +644,23 @@ Icache_State icache_serving_actions(Break_Reason* break_fetch) {
+   if (!ICACHE_FETCH_ACROSS_FETCH_TARGET && ic->lookups_per_cycle_count == 0 && ft_op_buffer_can_fetch_op(ic)) {
+     occupied_lookup_buffer = 1;
+   }
+-  while (ic->sd.op_count < ic->sd.max_op_count) {
++  {
++    // Per-call watchdog: detects a genuine single-cycle infinite loop in icache
++    // serving. It must be reset on each invocation (not static). The icache
++    // serving path runs on every fusion-misprediction recovery, so a
++    // process-lifetime counter accumulates across cycles and falsely trips on
++    // long or aggressive runs, even when each call iterates only a handful of
++    // times.
++    uint64_t dbg_icache_while_iters = 0;
++    while (ic->sd.op_count < ic->sd.max_op_count) {
++      if (++dbg_icache_while_iters > 100000) {
++        fprintf(stderr,
++                "[scarab] icache_serving stuck iters=%llu sd=%u max=%u buf=%u lookups=%u\n",
++                (unsigned long long)dbg_icache_while_iters, ic->sd.op_count, ic->sd.max_op_count,
++                (unsigned)ft_op_buffer_count(ic), ic->lookups_per_cycle_count);
++        fflush(stderr);
++        ASSERT(ic->proc_id, 0);
++      }
+     if (ft_op_buffer_can_fetch_op(ic)) {
+       icache_serve_ops();
+     } else if (ic->fetch_barrier_pending) {
+@@ -668,6 +686,7 @@ Icache_State icache_serving_actions(Break_Reason* break_fetch) {
+       *break_fetch = BREAK_ICACHE_READ_LIMIT;
+       return ICACHE_STAGE_RESTEER;
+     }
++    }
+   }
+ 
+   if (ft_op_buffer_can_fetch_op(ic)) {
+@@ -894,8 +913,8 @@ static inline void icache_process_ops(Stage_Data* cur_data, Flag fetched_from_uo
+       uc->sd.ops[ii]->fetched_from_uop_cache = TRUE;
+     }
+ 
+-    ASSERTM(ic->proc_id, ic->off_path == op->off_path, "Inconsistent off-path op PC: %llx ic:%i op:%i\n",
+-            op->inst_info->addr, ic->off_path, op->off_path);
++    /* Match instruction-fusion: per-op off-path tag drives icache path state */
++    ic->off_path = op->off_path;
+ 
+     if (!op->off_path) {
+       STAT_EVENT(ic->proc_id, UOPS_SERVED_BY_ICACHE_ON_PATH + op->fetched_from_uop_cache);
+diff --git a/src/idq_stage.cc b/src/idq_stage.cc
+index d897cf3a..71a4d7a4 100644
+--- a/src/idq_stage.cc
++++ b/src/idq_stage.cc
+@@ -32,6 +32,7 @@
+ #include <vector>
+ 
+ #include "ft.h"
++#include "ifuse/ifuse_recovery.h"
+ 
+ extern "C" {
+ #include "globals/assert.h"
+@@ -151,7 +152,8 @@ void IDQ_Stage::recover() {
+         DEBUG(proc_id, "IDQ queue flushing op_num:%llu off_path:%u\n", (unsigned long long)ops[i]->op_num,
+               ops[i]->off_path);
+         flushed = TRUE;
+-        ASSERT(proc_id, ops[i]->off_path);
++        ASSERT(proc_id, ops[i]->off_path || bp_recovery_info->ifuse_recovery ||
++                            ifuse_recovery_is_flushing());
+         ASSERT(proc_id, i == wrap_around(tail - 1));
+         if (ops[i]->parent_FT)
+           ft_free_op(ops[i]);
+@@ -183,7 +185,8 @@ void IDQ_Stage::recover() {
+     if (op && FLUSH_OP(op)) {
+       DEBUG(proc_id, "IDQ output flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
+       flushed = TRUE;
+-      ASSERT(proc_id, op->off_path);
++      ASSERT(proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                          ifuse_recovery_is_flushing());
+       ASSERT(proc_id, i == idq_sd.op_count - 1);
+       if (op->parent_FT)
+         ft_free_op(op);
+diff --git a/src/issue_queue.cc b/src/issue_queue.cc
+index 3b78e5cc..e744172b 100644
+--- a/src/issue_queue.cc
++++ b/src/issue_queue.cc
+@@ -47,8 +47,10 @@ extern "C" {
+ 
+ #include "exec_ports.h"
+ #include "exec_stage.h"
++#include "ifuse/ifuse_exec_pair.h"
+ #include "map_rename.h"
+ #include "node_stage.h"
++#include "backend_occupancy.h"
+ }
+ 
+ #include <deque>
+@@ -534,7 +536,7 @@ void IssueQueue::reject(uns16 entry_id) {
+ void IssueQueue::recover() {
+   for (IssueQueueEntry& entry : entries) {
+     Op* op = entry.op;
+-    if (op == nullptr || !op->off_path) {
++    if (op == nullptr || (!op->off_path && !bp_recovery_info->ifuse_recovery)) {
+       continue;
+     }
+ 
+@@ -667,10 +669,13 @@ void IssueQueues::dispatch() {
+   Op* op = NULL;
+   uns32 num_fill_rs = 0;
+ 
++  rs_dispatch_blocked = FALSE;
++
+   for (op = node->next_op_into_rs; op; op = op->next_node) {
+     ASSERT(proc_id, op->queue_id == MAX_UNS16 && op->queue_entry_id == MAX_UNS16);
+     uns16 queue_id = find_emptiest_queue(op);
+     if (queue_id == MAX_UNS16) {
++      rs_dispatch_blocked = TRUE;
+       break;
+     }
+ 
+diff --git a/src/lookahead_buffer.cc b/src/lookahead_buffer.cc
+index 9025c564..406f11ab 100644
+--- a/src/lookahead_buffer.cc
++++ b/src/lookahead_buffer.cc
+@@ -269,6 +269,27 @@ FT* lookahead_buffer_pop_ft(uns proc_id) {
+   return per_core_lookahead[proc_id]->pop_ft();
+ }
+ 
++void LookaheadBuffer::flush() {
++  for (uint64_t buf_pos = 0; buf_pos < lookahead_buffer.size(); ++buf_pos) {
++    if (!lookahead_buffer[buf_pos])
++      continue;
++    delete lookahead_buffer[buf_pos];
++    update_search_indexes_on_remove(buf_pos);
++    lookahead_buffer[buf_pos] = nullptr;
++  }
++  rdptr_lb = 0;
++  wrptr_lb = 0;
++  ft_buffer_count = 0;
++}
++
++void lookahead_buffer_flush(uns proc_id) {
++  if (!LOOKAHEAD_BUF_SIZE)
++    return;
++  ASSERT(proc_id, proc_id < per_core_lookahead.size());
++  ASSERT(proc_id, per_core_lookahead[proc_id]);
++  per_core_lookahead[proc_id]->flush();
++}
++
+ void init_lookahead_buffer(uns proc_id) {
+   // LOOKAHEAD buffer should be disabled if we're using pin-exec-driven
+   ASSERT(proc_id, !(LOOKAHEAD_BUF_SIZE && (FRONTEND == FE_PIN_EXEC_DRIVEN)));
+diff --git a/src/lookahead_buffer.h b/src/lookahead_buffer.h
+index 51c82d22..4ab2b4bc 100644
+--- a/src/lookahead_buffer.h
++++ b/src/lookahead_buffer.h
+@@ -35,6 +35,9 @@ FT* lookahead_buffer_pop_ft(uns proc_id);
+ /* init lookahead buffer up to configured size */
+ void init_lookahead_buffer(uns proc_id);
+ 
++/* Drop all prefetched FTs without refilling (used by I-Fuse recovery) */
++void lookahead_buffer_flush(uns proc_id);
++
+ /* Returns whether lookahead buffer can currently provide an op */
+ Flag lookahead_buffer_can_fetch_op(uns proc_id);
+ 
+@@ -163,6 +166,8 @@ class LookaheadBuffer {
+ 
+   /* Returns number of FTs in buffer */
+   uint64_t count() { return ft_buffer_count; };
++
++  void flush();
+ };
+ 
+ /* Returns all FTs in the buffer matching given static FT info */
+diff --git a/src/lsq.cc b/src/lsq.cc
+index a4640ff7..f84fa64d 100644
+--- a/src/lsq.cc
++++ b/src/lsq.cc
+@@ -43,6 +43,7 @@ extern "C" {
+ #include "bp/bp.h"
+ 
+ #include "exec_ports.h"
++#include "ifuse/ifuse_recovery.h"
+ #include "node_stage.h"
+ }
+ 
+@@ -124,13 +125,14 @@ void LSQ::recover(Counter flush_op_num) {
+     auto& back_entry = entries.back();
+ 
+     // Stop when reaching on-path ops earlier than the branch
+-    if (back_entry.op_num < flush_op_num) {
++    if (back_entry.op_num <= flush_op_num) {
+       break;
+     }
+ 
+     // Free this off-path mem op from the back
+     ASSERT(proc_id, !entries.empty());
+-    ASSERT(proc_id, back_entry.op->off_path);
++    ASSERT(proc_id, back_entry.op->off_path || bp_recovery_info->ifuse_recovery ||
++                        ifuse_recovery_is_flushing());
+     ASSERT(proc_id, entries.back().op_num == back_entry.op->op_num);
+     ASSERT(proc_id, back_entry.op->inst_info->table_info.mem_type == this->mem_type);
+     entries.pop_back();
+diff --git a/src/map.c b/src/map.c
+index 579cda89..424de39c 100644
+--- a/src/map.c
++++ b/src/map.c
+@@ -47,6 +47,8 @@
+ #include "libs/hash_lib.h"
+ 
+ #include "cmp_model.h"
++#include "ifuse/ifuse_exec_pair.h"
++#include "ifuse/ifuse_pmu.h"
+ #include "map_rename.h"
+ #include "model.h"
+ #include "op_info.h"
+@@ -191,6 +193,43 @@ void recover_map() {
+   rebuild_offpath_map();
+ }
+ 
++/**************************************************************************************/
++/* recover_map_ifuse: rebuild the dependency map after data-speculation
++ * replay */
++
++void recover_map_ifuse() {
++  ASSERT(map_data->proc_id, map_data->proc_id == td->proc_id);
++
++  /*
++   * Branch recovery normally preserves the on-path half of the map and drops
++   * only off-path writes. I-Fuse flushes younger correct-path ops, so rebuild
++   * both halves from the surviving in-flight sequence instead.
++   */
++  for (uns ii = 0; ii < NUM_REG_IDS * 2; ii++) {
++    map_data->reg_map[ii].op = &invalid_op;
++    map_data->reg_map[ii].op_num = 0;
++    map_data->reg_map[ii].unique_num = 0;
++  }
++  for (uns ii = 0; ii < NUM_REG_IDS; ii++)
++    map_data->map_flags[ii] = FALSE;
++
++  map_data->last_store[0].op = &invalid_op;
++  map_data->last_store[0].op_num = 0;
++  map_data->last_store[0].unique_num = 0;
++  map_data->last_store[1].op = &invalid_op;
++  map_data->last_store[1].op_num = 0;
++  map_data->last_store[1].unique_num = 0;
++  map_data->last_store_flag = FALSE;
++  hash_table_scan(&map_data->oracle_mem_hash, recover_mem_map_entry, NULL);
++
++  for (Op** op_p = (Op**)list_start_head_traversal(&td->seq_op_list);
++       op_p; op_p = (Op**)list_next_element(&td->seq_op_list)) {
++    update_map(*op_p);
++    if ((*op_p)->inst_info->table_info.mem_type == MEM_ST)
++      update_store_hash(*op_p);
++  }
++}
++
+ /**************************************************************************************/
+ /* recover_mem_map_entry: */
+ 
+@@ -547,6 +586,13 @@ static inline void update_store_hash(Op* op) {
+ void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
+   Wake_Up_Entry* temp;
+ 
++  // A fused LD2 may have already woken its dependents when LD1 completed. Its
++  // later ordinary cache completion must not produce or wake a second time.
++  if (ifuse_exec_pair_skip_duplicate_wakeup(op, type)) {
++    ifuse_exec_pair_restore_early_wake(op);
++    return;
++  }
++
+   _DEBUG(op->proc_id, DEBUG_REPLAY, "Waking up ops from src_op:%s unique:%s type:%s\n", unsstr64(op->op_num),
+          unsstr64(op->unique_num), dep_type_names[type]);
+   ASSERTM(op->proc_id, !op->wake_up_signaled[type] || op->replay, "op_num:%s op:%s off:%d\n", unsstr64(op->op_num),
+@@ -555,6 +601,10 @@ void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
+   // write back the register value for the dependent ops
+   reg_file_produce(op);
+ 
++  // If this is a completed LD1, publish the fused LD2 result immediately when
++  // the matching LD2 has already reached map.
++  ifuse_exec_pair_handle_producer_wakeup(op, type, wake_action);
++
+   ASSERT(op->proc_id, wake_action);
+   for (temp = op->wake_up_head; temp; temp = temp->next) {
+     Op* dep_op = temp->op;
+@@ -566,7 +616,13 @@ void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
+       continue;
+     /* if the stored unique num is not the same as the op pool entry, the op has
+            been reclaimed and the wake up should be ignored */
+-    if (dep_op->unique_num == dep_unique_num && dep_op->op_pool_valid) {
++    /*
++     * I-Fuse recovery may keep an Op object alive briefly through FT ownership
++     * after removing it from the backend. Do not wake such a squashed
++     * dependent from an older memory completion.
++     */
++    if (dep_op->unique_num == dep_unique_num && dep_op->op_pool_valid &&
++        !dep_op->ifuse_recovery_squashed) {
+       ASSERTM(op->proc_id, op->proc_id == dep_op->proc_id, "dep_op proc_id: %u, valid: %u\n", dep_op->proc_id,
+               dep_op->op_pool_valid);
+       if (op_sources_test_not_rdy(dep_op, temp->rdy_bit)) {
+@@ -655,6 +711,18 @@ void add_to_wake_up_lists(Op* op, void (*wake_action)(Op*, Op*, uns)) {
+       if (src_op->wake_up_signaled[src_info->type]) {
+         op_sources_clear_not_rdy(op, ii);
+         wake_action(src_op, op, ii);
++        /* A consumer of a fused LD2 that renames after LD2 fired: is it still
++         * inside LD2's wake delay, and does LD2 set its ready cycle? */
++        if (src_info->type == REG_DATA_DEP && src_op->ifuse_load_role == LOAD2 &&
++            src_op->ifuse_ld2_early_wake_signaled && !op->off_path) {
++          if (cycle_count < src_op->wake_cycle) {
++            STAT_EVENT(op->proc_id, IFUSE_LD2_CONSUMERS_RENAMED_IN_DELAY);
++            if (op->rdy_cycle == src_op->wake_cycle)
++              STAT_EVENT(op->proc_id, IFUSE_LD2_CONSUMERS_RENAMED_IN_DELAY_CRITICAL);
++          } else {
++            STAT_EVENT(op->proc_id, IFUSE_LD2_CONSUMERS_RENAMED_AFTER_READY);
++          }
++        }
+       }
+ 
+       DEBUG(op->proc_id, "Added to wake up list  op_num:%s  src_op_num:%s type:%s\n", unsstr64(op->op_num),
+@@ -697,6 +765,7 @@ void simple_wake(Op* src_op, Op* dep_op, uns rdy_bit) {
+   ASSERT(src_op->proc_id, dep_op && dep_op != &invalid_op);
+   UNUSED(rdy_bit);
+   dep_op->rdy_cycle = MAX2(dep_op->rdy_cycle, src_op->wake_cycle);
++  ifuse_pmu_note_wake(src_op, dep_op);
+   if (op_sources_not_rdy_is_clear(dep_op))
+     dep_op->state = dep_op->rdy_cycle == cycle_count + 1 ? OS_READY : OS_WAIT_FWD;
+ }
+diff --git a/src/map.h b/src/map.h
+index 543c8962..cf857efb 100644
+--- a/src/map.h
++++ b/src/map.h
+@@ -74,6 +74,7 @@ extern Map_Data* map_data;
+ Map_Data* set_map_data(Map_Data*);
+ void init_map(uns8);
+ void recover_map(void);
++void recover_map_ifuse(void);
+ void rebuild_offpath_map(void);
+ void reset_map(void);
+ void map_op(Op*);
+diff --git a/src/map_rename.c b/src/map_rename.c
+index 7781d482..b6ae2bf7 100644
+--- a/src/map_rename.c
++++ b/src/map_rename.c
+@@ -29,6 +29,11 @@
+ 
+ #include "map_rename.h"
+ 
++#include "bp/bp.h"
++#include "ifuse/ifuse_recovery.h"
++#include "ifuse/ifuse_stats.h"
++#include "ifuse/ifuse_rename.h"
++
+ #include "globals/assert.h"
+ #include "globals/global_defs.h"
+ #include "globals/global_types.h"
+@@ -396,11 +401,18 @@ static inline void reg_file_write_dst(Op *op, int self_reg_table_type, int paren
+     ASSERT(op->proc_id, op->prev_dst_reg_id[ii][self_reg_table_type] == REG_TABLE_REG_ID_INVALID);
+     op->prev_dst_reg_id[ii][self_reg_table_type] = reg_table->parent_reg_table->entries[parent_reg_id].child_reg_id;
+ 
+-    // allocate the dst register and write meta info
+-    int self_reg_id = reg_table->ops->alloc(reg_table, op, parent_reg_id);
+-
+-    // increase the reference number for register sharing
+-    reg_table->entries[self_reg_id].num_refs++;
++    // An I-Fuse LD2 takes the register LD1 reserved for it, already
++    // referenced, instead of allocating one
++    int self_reg_id = REG_TABLE_REG_ID_INVALID;
++    if (self_reg_table_type == REG_TABLE_TYPE_PHYSICAL)
++      self_reg_id = ifuse_take_ld2_dest_reg(op, op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
++    if (self_reg_id == REG_TABLE_REG_ID_INVALID) {
++      // allocate the dst register and write meta info
++      self_reg_id = reg_table->ops->alloc(reg_table, op, parent_reg_id);
++
++      // increase the reference number for register sharing
++      reg_table->entries[self_reg_id].num_refs++;
++    }
+ 
+     // update the parent table to ensure the latest assignment
+     reg_table->parent_reg_table->entries[parent_reg_id].child_reg_id = self_reg_id;
+@@ -449,7 +461,8 @@ static inline void reg_file_produce_dst(Op *op, int *reg_table_types, int reg_ta
+ }
+ 
+ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int reg_table_num) {
+-  ASSERT(op->proc_id, op->off_path);
++  ASSERT(op->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                          ifuse_recovery_is_flushing());
+ 
+   for (uns ii = 0; ii < op->inst_info->table_info.num_dest_regs; ii++) {
+     int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+@@ -469,7 +482,8 @@ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int r
+       ASSERT(op->proc_id, entry != NULL);
+ 
+       entry->num_refs--;
+-      ASSERT(op->proc_id, entry->off_path || entry->num_refs > 0);
++      ASSERT(op->proc_id, entry->off_path || bp_recovery_info->ifuse_recovery ||
++                              ifuse_recovery_is_flushing() || entry->num_refs > 0);
+       if (entry->num_refs > 0) {
+         continue;
+       }
+@@ -480,6 +494,47 @@ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int r
+   }
+ }
+ 
++/*
++ * Branch recovery normally flushes off-path ops, whose source reads do not
++ * affect the on-path counters. I-Fuse instead flushes younger correct-path ops.
++ * Remove those source reads before freeing their destinations so a later
++ * commit does not wait for consumers that no longer exist.
++ */
++static inline void reg_file_undo_ifuse_src_metadata(Op *op, int *reg_table_types, int reg_table_num) {
++  if (op->off_path)
++    return;
++
++  ASSERT(op->proc_id, bp_recovery_info->ifuse_recovery);
++
++  for (uns ii = 0; ii < op->inst_info->table_info.num_src_regs; ++ii) {
++    int reg_type = reg_file_get_reg_type(op->src_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
++    if (reg_type == REG_FILE_REG_TYPE_OTHER)
++      continue;
++
++    for (uns jj = 0; jj < reg_table_num; ++jj) {
++      int table_type = reg_table_types[jj];
++      int reg_id = op->src_reg_id[ii][table_type];
++      if (reg_id == REG_TABLE_REG_ID_INVALID)
++        continue;
++
++      struct reg_table *reg_table = map_data->reg_file[reg_type]->reg_table[table_type];
++      struct reg_table_entry *entry = &reg_table->entries[reg_id];
++
++      ASSERT(op->proc_id, entry->onpath_consumers_num > 0);
++      entry->onpath_consumers_num--;
++
++      if (op->exec_count > 0) {
++        ASSERT(op->proc_id, entry->onpath_consumed_count > 0);
++        entry->onpath_consumed_count--;
++      } else if (entry->atomic_pending_consumed !=
++                 REG_RENAMING_SCHEME_EARLY_RELEASE_PENDING_CONSUMED_MAX) {
++        ASSERT(op->proc_id, entry->atomic_pending_consumed > 0);
++        entry->atomic_pending_consumed--;
++      }
++    }
++  }
++}
++
+ // mark the previous entry with same archituctural id before the committed one as dead and remove it
+ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_table_num) {
+   for (uns ii = 0; ii < op->inst_info->table_info.num_src_regs; ++ii) {
+@@ -547,6 +602,7 @@ static inline void reg_file_init_checkpoint() {
+     map_data->reg_file[ii]->reg_checkpoint->entries = (struct reg_table_entry *)malloc(
+         sizeof(struct reg_table_entry) * map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL]->size);
+     map_data->reg_file[ii]->reg_checkpoint->is_valid = FALSE;
++    map_data->reg_file[ii]->reg_checkpoint->owner_op_num = 0;
+   }
+ }
+ 
+@@ -555,7 +611,7 @@ static inline void reg_file_init_checkpoint() {
+   oldest mispredicted branch is resolved
+   Therefore, only maintain one checkpoint of that mispredicted branch for recovering SRT
+ */
+-static inline void reg_file_snapshot_srt() {
++static inline void reg_file_snapshot_srt(Op *op) {
+   for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
+     struct reg_table *srt = map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL];
+     struct reg_checkpoint *checkpoint = map_data->reg_file[ii]->reg_checkpoint;
+@@ -563,6 +619,7 @@ static inline void reg_file_snapshot_srt() {
+ 
+     ASSERT(map_data->proc_id, !checkpoint->is_valid);
+     checkpoint->is_valid = TRUE;
++    checkpoint->owner_op_num = op->op_num;
+   }
+ }
+ 
+@@ -580,6 +637,7 @@ static inline void reg_file_rollback_srt() {
+ 
+     ASSERT(map_data->proc_id, checkpoint->is_valid);
+     checkpoint->is_valid = FALSE;
++    checkpoint->owner_op_num = 0;
+   }
+ }
+ 
+@@ -1007,7 +1065,7 @@ void reg_renaming_scheme_realistic_rename(Op *op) {
+ 
+   // checkpoint the speculative register table for recovering
+   if (!op->off_path && op->inst_info->table_info.cf_type && op->bp_pred_info->recover_at_exec)
+-    reg_file_snapshot_srt();
++    reg_file_snapshot_srt(op);
+ }
+ 
+ // do not check the reg file when issuing
+@@ -1046,6 +1104,7 @@ void reg_renaming_scheme_realistic_recover(Op *op) {
+   for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
+        op_p = (Op **)list_prev_element(&td->seq_op_list)) {
+     reg_file_flush_mispredict(*op_p, reg_table_types, sizeof(reg_table_types) / sizeof(reg_table_types[0]));
++    ifuse_recover_op(*op_p);
+   }
+ }
+ 
+@@ -1123,7 +1182,7 @@ void reg_renaming_scheme_late_allocation_rename(Op *op) {
+ 
+   // checkpoint the speculative register table for recovering
+   if (!op->off_path && op->inst_info->table_info.cf_type && op->bp_pred_info->recover_at_exec)
+-    reg_file_snapshot_srt();
++    reg_file_snapshot_srt(op);
+ }
+ 
+ /*
+@@ -1196,6 +1255,7 @@ void reg_renaming_scheme_late_allocation_recover(Op *op) {
+   for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
+        op_p = (Op **)list_prev_element(&td->seq_op_list)) {
+     reg_file_flush_mispredict(*op_p, reg_table_types, sizeof(reg_table_types) / sizeof(reg_table_types[0]));
++    ifuse_recover_op(*op_p);
+   }
+ }
+ 
+@@ -1853,6 +1913,10 @@ void reg_file_rename(Op *op) {
+   // allocate physical registers
+   reg_renaming_scheme_func_table[REG_RENAMING_SCHEME].rename(op);
+ 
++  ifuse_rename_op(op);
++  ifuse_observe_gp_reg_pressure(op->proc_id);
++  ifuse_observe_extra_reg_pressure(op->proc_id);
++
+   reg_file_collect_rename_stat(op);
+ }
+ 
+@@ -1886,10 +1950,66 @@ void reg_file_consume(Op *op) {
+   Procedure:
+   --- write back the dst registers
+ */
++/*
++ * Physical register file write-port usage
++ *
++ * Every physical register write needs a write port in the cycle the value is
++ * written back. reg_file_produce() is often called before that cycle: an ALU
++ * op is produced when it issues, with wake_cycle = issue + latency. Counting
++ * at the call would put the write in the wrong cycle, so we count it at
++ * op->wake_cycle instead, in a ring of per-cycle counters, and
++ * reg_file_observe_cycle() reads out one slot per cycle. A fused LD2 is
++ * counted too: it writes its own register at LD1's wake cycle plus the LD2
++ * wake delay.
++ *
++ * The ring only has to reach as far ahead as the longest execute latency,
++ * since loads are produced when their data returns. A write further out than
++ * the ring is counted in PRF_WRITES_BEYOND_RING rather than silently dropped,
++ * so a nonzero value means the ring is too small.
++ */
++#define PRF_WRITE_RING_SIZE 1024
++static uns prf_write_ring[MAX_NUM_PROCS][REG_FILE_REG_TYPE_NUM][PRF_WRITE_RING_SIZE];
++
++static void reg_file_count_writes(Op *op) {
++  Counter write_cycle = MAX2(op->wake_cycle, cycle_count);
++  if (write_cycle - cycle_count >= PRF_WRITE_RING_SIZE) {
++    STAT_EVENT(op->proc_id, PRF_WRITES_BEYOND_RING);
++    return;
++  }
++
++  for (uns ii = 0; ii < op->inst_info->table_info.num_dest_regs; ++ii) {
++    int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
++    if (reg_type != REG_FILE_REG_TYPE_OTHER)
++      prf_write_ring[op->proc_id][reg_type][write_cycle % PRF_WRITE_RING_SIZE]++;
++  }
++}
++
++/*
++  Called by:
++  --- cmp_model.c -> once per core per cycle, after all pipeline stages
++  Procedure:
++  --- record how many write ports each register file used this cycle
++*/
++void reg_file_observe_cycle(uns proc_id) {
++  STAT_EVENT(proc_id, PRF_WRITE_OBSERVED_CYCLES);
++  for (uns reg_type = 0; reg_type < REG_FILE_REG_TYPE_NUM; ++reg_type) {
++    uns *slot = &prf_write_ring[proc_id][reg_type][cycle_count % PRF_WRITE_RING_SIZE];
++    uns writes = *slot;
++    *slot = 0;
++
++    // GP and vector stats are laid out side by side, so reg_type picks the one.
++    INC_STAT_EVENT(proc_id, PRF_WRITES_GP + reg_type, writes);
++    INC_STAT_EVENT(proc_id, PRF_WRITE_PORTS_PER_CYCLE_GP + reg_type, writes);
++    STAT_EVENT(proc_id, (reg_type == REG_FILE_REG_TYPE_GENERAL_PURPOSE ? PRF_WRITE_PORTS_GP_0 : PRF_WRITE_PORTS_VEC_0) +
++                            MIN2(writes, 8));
++  }
++}
++
+ void reg_file_produce(Op *op) {
+   ASSERT(map_data->proc_id,
+          REG_RENAMING_SCHEME >= REG_RENAMING_SCHEME_INFINITE && REG_RENAMING_SCHEME < REG_RENAMING_SCHEME_NUM);
+   reg_renaming_scheme_func_table[REG_RENAMING_SCHEME].produce(op);
++  reg_file_count_writes(op);
+ }
+ 
+ /*
+@@ -1904,6 +2024,80 @@ void reg_file_recover(Op *op) {
+   reg_renaming_scheme_func_table[REG_RENAMING_SCHEME].recover(op);
+ }
+ 
++/*
++  I-Fuse LD2 failures differ from branch mispredictions:
++  --- LD2 itself remains valid
++  --- younger ops are control-flow-correct but must replay
++  --- branch checkpoints must remain untouched
++
++  Walk younger destinations from youngest to oldest. Restoring each previous
++  destination mapping in reverse program order reconstructs the architectural
++  map as it stood immediately after LD2 renamed.
++*/
++void reg_file_recover_ifuse(Op *op) {
++  if (REG_RENAMING_SCHEME == REG_RENAMING_SCHEME_INFINITE)
++    return;
++
++  for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
++    struct reg_checkpoint *checkpoint =
++        map_data->reg_file[ii]->reg_checkpoint;
++    if (checkpoint->is_valid && checkpoint->owner_op_num > op->op_num) {
++      checkpoint->is_valid = FALSE;
++      checkpoint->owner_op_num = 0;
++    }
++  }
++
++  int physical_table_types[] = {REG_TABLE_TYPE_PHYSICAL};
++  int late_allocation_table_types[] = {REG_TABLE_TYPE_VIRTUAL, REG_TABLE_TYPE_PHYSICAL};
++  int *reg_table_types = physical_table_types;
++  int reg_table_num = sizeof(physical_table_types) / sizeof(physical_table_types[0]);
++
++  if (REG_RENAMING_SCHEME == REG_RENAMING_SCHEME_LATE_ALLOCATION) {
++    reg_table_types = late_allocation_table_types;
++    reg_table_num = sizeof(late_allocation_table_types) / sizeof(late_allocation_table_types[0]);
++  }
++
++  for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list);
++       op_p && (*op_p)->op_num > op->op_num;
++       op_p = (Op **)list_prev_element(&td->seq_op_list)) {
++    Op *younger_op = *op_p;
++
++    /*
++     * FT ownership can keep the discarded Op object pool-valid briefly. Mark
++     * it explicitly so an older memory completion cannot wake its stale
++     * dependency-list entry after the issue queue has released that entry.
++     */
++    younger_op->ifuse_recovery_squashed = TRUE;
++
++    for (uns ii = 0; ii < younger_op->inst_info->table_info.num_dest_regs; ++ii) {
++      int reg_type =
++          reg_file_get_reg_type(younger_op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
++      if (reg_type == REG_FILE_REG_TYPE_OTHER)
++        continue;
++
++      for (int jj = 0; jj < reg_table_num; ++jj) {
++        int table_type = reg_table_types[jj];
++        int current_reg_id = younger_op->dst_reg_id[ii][table_type];
++        int previous_reg_id = younger_op->prev_dst_reg_id[ii][table_type];
++        int parent_reg_id = younger_op->dst_reg_id[ii][table_type - 1];
++
++        if (current_reg_id != REG_TABLE_REG_ID_INVALID &&
++            parent_reg_id != REG_TABLE_REG_ID_INVALID) {
++          map_data->reg_file[reg_type]
++              ->reg_table[table_type]
++              ->parent_reg_table
++              ->entries[parent_reg_id]
++              .child_reg_id = previous_reg_id;
++        }
++      }
++    }
++
++    reg_file_undo_ifuse_src_metadata(younger_op, reg_table_types, reg_table_num);
++    reg_file_flush_mispredict(younger_op, reg_table_types, reg_table_num);
++    ifuse_recover_op(younger_op);
++  }
++}
++
+ /*
+   Called by:
+   --- node_stage.c -> when the op is precommitted
+diff --git a/src/map_rename.h b/src/map_rename.h
+index 02fc21b2..49c9fbc5 100644
+--- a/src/map_rename.h
++++ b/src/map_rename.h
+@@ -165,6 +165,7 @@ struct reg_table {
+ struct reg_checkpoint {
+   // metadata for validation of the special checkpoint mechanism in Scarab
+   Flag is_valid;
++  Counter owner_op_num;
+ 
+   // only map on-path op for recovery
+   struct reg_table_entry *entries;
+@@ -217,7 +218,9 @@ void reg_file_rename(Op *op);                 // alloc destination registers for
+ Flag reg_file_issue(Op *op);                  // check the op before being issued into the FU
+ void reg_file_consume(Op *op);                // consume the src registers
+ void reg_file_produce(Op *op);                // write back the dst registers
++void reg_file_observe_cycle(uns proc_id);     // Sample PRF write-port usage for this cycle
+ void reg_file_recover(Op *op);                // flush registers of misprediction operands
++void reg_file_recover_ifuse(Op *op);          // Flush younger operands after an I-Fuse LD2 failure
+ void reg_file_precommit(Op *op);              // update the register metadata when an op is non-spec
+ void reg_file_commit(Op *op);                 // release the previous register with same architectural register id
+ 
+diff --git a/src/map_stage.c b/src/map_stage.c
+index a7b5aa03..caaed0d8 100644
+--- a/src/map_stage.c
++++ b/src/map_stage.c
+@@ -47,8 +47,11 @@
+ #include "bp/bp.h"
+ 
+ #include "ft.h"
++#include "ifuse/ifuse_exec_pair.h"
++#include "ifuse/ifuse_recovery.h"
+ #include "map.h"
+ #include "map_rename.h"
++#include "node_stage.h"
+ #include "model.h"
+ #include "op_pool.h"
+ #include "statistics.h"
+@@ -147,7 +150,8 @@ void recover_map_stage() {
+           DEBUG(map->proc_id, "Map flushing op_num:%llu off_path:%u\n", (unsigned long long)cur->ops[jj]->op_num,
+                 cur->ops[jj]->off_path);
+           flushed = TRUE;
+-          ASSERT(map->proc_id, cur->ops[jj]->off_path);
++          ASSERT(map->proc_id, cur->ops[jj]->off_path || bp_recovery_info->ifuse_recovery ||
++                                   ifuse_recovery_is_flushing());
+           if (cur->ops[jj]->parent_FT)
+             ft_free_op(cur->ops[jj]);
+           cur->ops[jj] = NULL;
+@@ -190,6 +194,21 @@ void debug_map_stage() {
+ /**************************************************************************************/
+ /* map_cycle: */
+ 
++/* What the ROB looks like when rename stalls for lack of physical registers.
++ * Registers are freed only at retire, so a head that cannot retire is what
++ * keeps them allocated. */
++static void map_stage_collect_reg_file_stall_stat(void) {
++  INC_STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_ROB_OCCUPANCY, node->node_count);
++  Op* head = node->node_head;
++  if (!head || head->state == OS_DONE || OP_DONE(head))
++    return;
++  STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_HEAD_NOT_DONE);
++  if (head->engine_info.dcmiss)
++    STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_HEAD_DC_MISS);
++  if (head->engine_info.l1_miss)
++    STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_HEAD_L1_MISS);
++}
++
+ void update_map_stage(Stage_Data* src_sd) {
+   /* stall if the renaming table is full */
+   if (!reg_file_available(STAGE_MAX_OP_COUNT)) {
+@@ -200,6 +219,7 @@ void update_map_stage(Stage_Data* src_sd) {
+           map->last_sd->op_count, (src_sd->op_count && src_sd->ops[0]) ? unsstr64(src_sd->ops[0]->op_num) : "none",
+           src_sd->op_count);
+     STAT_EVENT(map->proc_id, MAP_STAGE_STALL_ITSELF);
++    map_stage_collect_reg_file_stall_stat();
+     return;
+   }
+   map->reg_file_stall = FALSE;
+@@ -264,6 +284,11 @@ static inline void stage_process_op(Op* op) {
+ 
+   /* setting wake up lists */
+   add_to_wake_up_lists(op, model->wake_hook);
++
++  // Register LD1 and LD2 after LD2's ordinary dependency links exist. The
++  // I-Fuse pair buffer can then model the fused early-result wake-up for
++  // either ordering: LD1 completion first, or LD2 map first.
++  ifuse_exec_pair_track_mapped_load(op, model->wake_hook);
+ }
+ 
+ static inline void map_stage_collect_stat(Flag stall, Flag starved) {
+diff --git a/src/memory/memory.stat.def b/src/memory/memory.stat.def
+index 82d84621..624543d0 100644
+--- a/src/memory/memory.stat.def
++++ b/src/memory/memory.stat.def
+@@ -200,6 +200,11 @@ DEF_STAT(  DCACHE_MISS		   , DIST  , NO_RATIO  )
+ DEF_STAT(  DCACHE_ST_BUFFER_HIT	   , COUNT , NO_RATIO  )
+ DEF_STAT(  DCACHE_HIT		   , DIST  , NO_RATIO  )
+ 
++     /* Demand accesses issued to the L1-D (one per op that reaches the dcache).
++        Total issued = ONPATH + OFFPATH. */
++DEF_STAT(  DCACHE_ACCESS_ONPATH	   , COUNT , NO_RATIO  )
++DEF_STAT(  DCACHE_ACCESS_OFFPATH   , COUNT , NO_RATIO  )
++
+ DEF_STAT(  DCACHE_MISS_ONPATH		   , DIST  , NO_RATIO  )
+ DEF_STAT(  DCACHE_MISS_OFFPATH		   , DIST  , NO_RATIO  )
+ 
+diff --git a/src/node_stage.c b/src/node_stage.c
+index 02dae094..2b6db9f5 100644
+--- a/src/node_stage.c
++++ b/src/node_stage.c
+@@ -55,6 +55,11 @@
+ #include "exec_ports.h"
+ #include "ft.h"
+ #include "icache_stage.h"
++#include "ifuse/ifuse_exec_pair.h"
++#include "ifuse/ifuse_recovery.h"
++#include "ifuse/ifuse_rename.h"
++#include "ifuse/ifuse_pmu.h"
++#include "ifuse/ifuse_train_retire.h"
+ #include "issue_queue.h"
+ #include "lsq.h"
+ #include "map.h"
+@@ -171,6 +176,9 @@ void recover_node_stage() {
+   flush_scheduling_buffer();
+   flush_rs();
+   flush_window();
++  // Younger precommitted ops may have been removed. Rebuild this cursor from
++  // the surviving ROB entries on the next node-stage update.
++  node->node_precommit = NULL;
+ 
+   // recover last_scheduled_opnum
+   if (node->last_scheduled_opnum >= bp_recovery_info->recovery_op_num)
+@@ -188,7 +196,8 @@ void flush_scheduling_buffer() {
+       DEBUG(node->proc_id, "Node sched-buffer flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
+             op->off_path);
+       ASSERT(node->proc_id, node->proc_id == op->proc_id);
+-      ASSERT(node->proc_id, op->off_path);
++      ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                                ifuse_recovery_is_flushing());
+       ASSERTM(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num, "op_num:%s\n", unsstr64(op->op_num));
+ 
+       node->sd.ops[ii] = NULL;
+@@ -205,7 +214,8 @@ void flush_rs() {
+     DEBUG(node->proc_id, "Node RS-input flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
+           op->off_path);
+     ASSERT(node->proc_id, node->proc_id == op->proc_id);
+-    ASSERT(node->proc_id, op->off_path);
++    ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                              ifuse_recovery_is_flushing());
+     ASSERTM(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num, "op_num:%s\n", unsstr64(op->op_num));
+     node->next_op_into_rs = NULL;  // all later ops will also be flushed
+   }
+@@ -216,19 +226,24 @@ void flush_window() {
+   Op** last;
+   uns flush_ops = 0;
+   uns keep_ops = 0;
+-
+   node->node_tail = NULL;
+   for (op = node->node_head, last = &node->node_head; op; op = *last) {
+     ASSERT(node->proc_id, node->proc_id == op->proc_id);
+ 
+-    if (FLUSH_OP(op)) {
++    const Flag ifuse_flush_offpath =
++        bp_recovery_info->ifuse_recovery && op->off_path && !IS_FLUSHING_OP(op);
++
++    if (FLUSH_OP(op) || ifuse_flush_offpath) {
+       DEBUG(node->proc_id, "Node window flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
+             op->off_path);
+-      ASSERT(node->proc_id, op->off_path);
++      ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                                ifuse_recovery_is_flushing());
+       if (!op->macro_fused)
+         flush_ops++;
+-      ASSERT(node->proc_id, op->off_path);
+-      ASSERT(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num);
++      ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                                ifuse_recovery_is_flushing());
++      if (!ifuse_flush_offpath)
++        ASSERT(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num);
+       op->in_node_list = FALSE;
+       *last = op->next_node;
+       if (op->parent_FT)
+@@ -338,10 +353,14 @@ void update_node_stage(Stage_Data* src_sd) {
+ /* node_fill_rob: This function takes ops from the map stage and allocates them into the node table.
+  *    Note, this function does not place the Op in the RS, that is done later.*/
+ 
++Node_Dispatch_Block node_dispatch_block = NODE_DISPATCH_BLOCK_NONE;
++
+ void node_fill_rob(Stage_Data* src_sd) {
+   Flag on_path = FALSE;
+   uns ii;
+ 
++  node_dispatch_block = NODE_DISPATCH_BLOCK_NONE;
++
+   /* if nothing to process, return */
+   if (src_sd->op_count == 0) {
+     DEBUG(node->proc_id, "Node fill starved: src_sd_op_count:0 node_count:%d\n", node->node_count);
+@@ -355,6 +374,7 @@ void node_fill_rob(Stage_Data* src_sd) {
+     if (is_node_table_full()) {
+       collect_node_table_full_stats(node->node_head);
+       rob_block_issue_reason = ROB_BLOCK_ISSUE_FULL;
++      node_dispatch_block = NODE_DISPATCH_BLOCK_ROB;
+       return;
+     }
+     rob_block_issue_reason = ROB_BLOCK_ISSUE_NONE;
+@@ -371,6 +391,8 @@ void node_fill_rob(Stage_Data* src_sd) {
+               node->node_count);
+         STAT_EVENT(op->proc_id, LSQ_FULL_TOTAL);
+         STAT_EVENT(op->proc_id, LSQ_FULL_TOTAL + op->inst_info->table_info.mem_type);
++        node_dispatch_block = op->inst_info->table_info.mem_type == MEM_LD ? NODE_DISPATCH_BLOCK_LQ
++                                                                           : NODE_DISPATCH_BLOCK_SQ;
+         return;
+       }
+ 
+@@ -417,7 +439,11 @@ void node_fill_rob(Stage_Data* src_sd) {
+ 
+     DEBUG(node->proc_id, "Issuing the op op_num:%s off_path:%d\n", unsstr64(op->op_num), op->off_path);
+ 
+-    op->state = OS_IN_ROB;
++    // The I-Fuse execution-side pair may already have finalized (OS_DONE) a
++    // truly fused LD2 if LD1 completed before LD2 reached dispatch. Do not
++    // regress it back to an in-flight state.
++    if (op->state != OS_DONE)
++      op->state = OS_IN_ROB;
+ 
+     /* always stop issuing after a synchronizing op */
+     if (op->inst_info->table_info.bar_type & BAR_ISSUE)
+@@ -543,13 +569,87 @@ void node_retire() {
+     }
+     if (op->inst_info->table_info.mem_type == MEM_LD) {
+       STAT_EVENT(op->proc_id, LD_NO_DEPENDENTS + (op->wake_up_head ? 1 : 0));
++
++      // Accumulate on-path load latency (retire guarantees on-path here)
++      INC_STAT_EVENT(op->proc_id, LD_EXEC_MINUS_FETCH_LATENCY, op->exec_cycle - op->fetch_cycle);
++      INC_STAT_EVENT(op->proc_id, LD_RETIRE_MINUS_FETCH_LATENCY, cycle_count - op->fetch_cycle);
++
++      /* Observed load stalls: done - exec (compare totals across runs) */
++      if (op->fetch_cycle != MAX_CTR && op->exec_cycle != MAX_CTR &&
++          op->done_cycle != MAX_CTR) {
++        Flag fused_path = op->ifuse_ld2_early_wake_signaled;
++        Counter stall_cycles = 0;
++
++        STAT_EVENT(op->proc_id, IFUSE_ALL_LOADS);
++        if (fused_path) {
++          STAT_EVENT(op->proc_id, IFUSE_NUM_FUSED_LOADS);
++          STAT_EVENT(op->proc_id, IFUSE_LOAD_COVERAGE);
++        } else {
++          STAT_EVENT(op->proc_id, IFUSE_NUM_DEMAND_LOADS);
++        }
++
++        if (op->exec_cycle >= op->fetch_cycle) {
++          INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_MINUS_FETCH,
++                         op->exec_cycle - op->fetch_cycle);
++        }
++        if (cycle_count >= op->fetch_cycle) {
++          INC_STAT_EVENT(op->proc_id, IFUSE_LD_RETIRE_MINUS_FETCH,
++                         cycle_count - op->fetch_cycle);
++        }
++        if (op->done_cycle >= op->exec_cycle) {
++          stall_cycles = op->done_cycle - op->exec_cycle;
++          INC_STAT_EVENT(op->proc_id, IFUSE_LD_STALL_CYCLES, stall_cycles);
++          INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_TO_DONE, stall_cycles);
++          INC_STAT_EVENT(op->proc_id, IFUSE_AVG_STALL_PER_LOAD, stall_cycles);
++        }
++
++        if (fused_path) {
++          if (op->exec_cycle >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_MINUS_FETCH_FUSED,
++                           op->exec_cycle - op->fetch_cycle);
++          }
++          if (cycle_count >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_RETIRE_MINUS_FETCH_FUSED,
++                           cycle_count - op->fetch_cycle);
++          }
++          if (stall_cycles) {
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_STALL_CYCLES_FUSED, stall_cycles);
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_TO_DONE_FUSED, stall_cycles);
++            INC_STAT_EVENT(op->proc_id, IFUSE_AVG_STALL_PER_FUSED, stall_cycles);
++          }
++        } else {
++          if (op->exec_cycle >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_MINUS_FETCH_DEMAND,
++                           op->exec_cycle - op->fetch_cycle);
++          }
++          if (cycle_count >= op->fetch_cycle) {
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_RETIRE_MINUS_FETCH_DEMAND,
++                           cycle_count - op->fetch_cycle);
++          }
++          if (stall_cycles) {
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_STALL_CYCLES_DEMAND, stall_cycles);
++            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_TO_DONE_DEMAND, stall_cycles);
++            INC_STAT_EVENT(op->proc_id, IFUSE_AVG_STALL_PER_DEMAND, stall_cycles);
++          }
++        }
++      }
+     }
+     STAT_EVENT(op->proc_id, RET_OP_EXEC_COUNT_0 + MIN2(32, op->exec_count));
+ 
+     op->retire_cycle = cycle_count;
+ 
++    /* Learn only from committed operations and use all-uop program distance */
++    ifuse_train_retired_op(op);
++
++    // Count completed fusions, not speculative frontend classifications
++    if (op->ifuse_load_role == LOAD2) {
++      STAT_EVENT(op->proc_id, IFUSE_FUSED_LOADS);
++    }
++
+     // free the previous register entries with same architectural destination
+     reg_file_commit(op);
++    ifuse_retire_op(op);
++    ifuse_pmu_retire(op);
+ 
+     node_precommit_retire(op);
+ 
+diff --git a/src/node_stage.h b/src/node_stage.h
+index 2727ffc5..137404d8 100644
+--- a/src/node_stage.h
++++ b/src/node_stage.h
+@@ -60,6 +60,16 @@ typedef struct Node_Stage_struct {
+ 
+ extern Node_Stage* node;
+ 
++/* Why node_fill_rob() stopped allocating this cycle (for top-down
++ * attribution) */
++typedef enum Node_Dispatch_Block_enum {
++  NODE_DISPATCH_BLOCK_NONE,
++  NODE_DISPATCH_BLOCK_ROB,
++  NODE_DISPATCH_BLOCK_LQ,
++  NODE_DISPATCH_BLOCK_SQ,
++} Node_Dispatch_Block;
++extern Node_Dispatch_Block node_dispatch_block;
++
+ /**************************************************************************************/
+ // Prototypes
+ 
+diff --git a/src/op.h b/src/op.h
+index b9c7b80a..43a1b8c6 100644
+--- a/src/op.h
++++ b/src/op.h
+@@ -77,6 +77,13 @@ typedef struct FT FT;
+ DECLARE_ENUM(Op_State, OP_STATE_LIST, OS_);
+ // clang-format on
+ 
++typedef enum Fusion_Candidate_Type {
++  NOT_FUSION_CANDIDATE,
++  LOAD1,
++  LOAD2,
++  PREDICTED_NOT_FUSED,
++} Fusion_Candidate_Type;
++
+ /**************************************************************************************/
+ 
+ typedef struct Wake_Up_Entry_struct {
+@@ -239,6 +246,31 @@ struct Op_struct {
+   uns16 dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];       // the reg id of allocated reg file entries
+   uns16 prev_dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];  // the previous dst reg id with the same parent register id
+   // }}}
++
++  // {{{ I-Fuse information
++  Fusion_Candidate_Type ifuse_load_role;
++  Counter               ifuse_partner_op_num;
++  Addr                  ifuse_partner_ld1_pc;
++  uns16                 ifuse_ld2_physical_reg_id;
++  Flag                  ifuse_ld2_early_wake_signaled;
++  Flag                  ifuse_ld2_agu_completed;
++  Counter               ifuse_ld2_data_cycle;         // Cycle LD1's fused data arrived
++  Counter               ifuse_ld2_early_wake_cycle;   // Wake cycle set by the fused path
++  Flag                  ifuse_ld2_prediction_failed;
++  Flag                  ifuse_flush_op;
++  Flag                  ifuse_recovery_squashed;
++  /* Dynamic on-path load distance LD2 - LD1 at fetch (0 if not LD2) */
++  uint64_t              ifuse_pair_distance;
++  /* LD1: LD2's predicted address, whose bank the fused access also reads */
++  Addr                  ifuse_pred_ld2_va;
++  /* LD2: cycle LD1 accessed the L1-D, for the PMU's no-fusion estimate */
++  Counter               ifuse_ld1_dcache_cycle;
++  /* Consumer: unique_num of a fused LD2 source (0 if none), and the latest
++   * wake cycle among its other sources. See ifuse_pmu.c. */
++  Counter               ifuse_pmu_ld2_unique_num;
++  Counter               ifuse_pmu_other_rdy_cycle;
++  // }}}
++
+   FT* parent_FT;
+   FT* parent_FT_off_path;
+ };
+diff --git a/src/op_pool.c b/src/op_pool.c
+index 674c45c5..f26425f0 100644
+--- a/src/op_pool.c
++++ b/src/op_pool.c
+@@ -52,6 +52,8 @@ allocates them once and then hands out pointers every time 'alloc_op' is called.
+ #include "frontend/frontend_intf.h"
+ #include "frontend/pin_trace_fe.h"
+ 
++#include "ifuse/ifuse_exec_pair.h"
++#include "ifuse/ifuse_recovery.h"
+ #include "map.h"
+ #include "model.h"
+ #include "op_info.h"
+@@ -145,6 +147,10 @@ void free_op(Op* op) {
+   if (PIPEVIEW)
+     pipeview_print_op(op);
+ 
++  // Remove execution-side I-Fuse state before this Op object can be recycled
++  ifuse_exec_pair_forget_op(op);
++  ifuse_recover_flushed_op(op);
++
+   op->op_pool_valid = FALSE;
+   op_pool_active_ops--;
+   ASSERTM(0, op_pool_active_ops >= 0, "op_pool_active_ops:%u\n", op_pool_active_ops);
+diff --git a/src/param_files.def b/src/param_files.def
+index 7f2533b3..7e5f77b4 100644
+--- a/src/param_files.def
++++ b/src/param_files.def
+@@ -45,3 +45,4 @@
+ #include "prefetcher/pref_phase.param.def"
+ #include "prefetcher/pref_2dc.param.def"
+ #include "prefetcher/pref_markov.param.def"
++#include "ifuse/ifuse.param.def"
+diff --git a/src/pin/pin_exec/makefile b/src/pin/pin_exec/makefile
+index da266984..2608a131 100644
+--- a/src/pin/pin_exec/makefile
++++ b/src/pin/pin_exec/makefile
+@@ -12,7 +12,7 @@ CONFIG_ROOT := ../Config
+ endif
+ include $(CONFIG_ROOT)/makefile.config
+ include makefile.rules
+-include $(TOOLS_ROOT)/Config/makefile.default.rules
++include $(PIN_ROOT)/source/tools/Config/makefile.default.rules
+ 
+ ##############################################################
+ #
+diff --git a/src/stat_files.def b/src/stat_files.def
+index 5f417186..14a7254d 100644
+--- a/src/stat_files.def
++++ b/src/stat_files.def
+@@ -37,4 +37,4 @@
+ #include "prefetcher/l2l1pref.stat.def" 
+ #include "power/power.stat.def"
+ #include "prefetcher/pref.stat.def"
+-
++#include "ifuse/ifuse.stat.def"
+diff --git a/src/topdown.c b/src/topdown.c
+index 43c3b69b..d9ef2fa8 100644
+--- a/src/topdown.c
++++ b/src/topdown.c
+@@ -43,6 +43,7 @@
+ #include "map_stage.h"
+ #include "node_stage.h"
+ #include "op.h"
++#include "ifuse/ifuse_exec_pair.h"
+ 
+ const static uns64 TOPDOWN_SCALE_FACTOR = 10000;
+ const static int TOPDOWN_RECOVERY_DEPTH = 2;
+@@ -87,6 +88,70 @@ void topdown_bp_recovery(uns proc_id, Op* op) {
+   idq_stage_set_recovery_cycle(TOPDOWN_RECOVERY_DEPTH);
+ }
+ 
++/*
++ * Backend-bound breakdown
++ *
++ * Backend Bound is a residual: every slot not used by Retiring, Bad
++ * Speculation, or Frontend Bound. topdown_idq_update() can compute that
++ * residual cycle by cycle, so each backend slot is charged to exactly one
++ * structure and one ROB head state, and each breakdown sums to Backend Bound.
++ *
++ * Structure: what stopped allocation this cycle. Rename stalls on the physical
++ * register file; dispatch stops on a full ROB, LQ, or SQ. Anything else (a
++ * partially issued group with nothing full) is Other.
++ *
++ * Head state: why the window is not draining, from the oldest op.
++ */
++static void topdown_backend_attribute(uns proc_id, int backend_slots, Flag stalled_cycle) {
++  if (backend_slots <= 0)
++    return;
++
++  int full = TOPDOWN_BE_FULL_OTHER_SLOTS;
++  if (map->reg_file_stall)
++    full = TOPDOWN_BE_FULL_PRF_SLOTS;
++  else if (node_dispatch_block == NODE_DISPATCH_BLOCK_ROB)
++    full = TOPDOWN_BE_FULL_ROB_SLOTS;
++  else if (node_dispatch_block == NODE_DISPATCH_BLOCK_LQ)
++    full = TOPDOWN_BE_FULL_LQ_SLOTS;
++  else if (node_dispatch_block == NODE_DISPATCH_BLOCK_SQ)
++    full = TOPDOWN_BE_FULL_SQ_SLOTS;
++  INC_STAT_EVENT(proc_id, full, backend_slots);
++  if (stalled_cycle)
++    STAT_EVENT(proc_id, TOPDOWN_BE_FULL_PRF_CYCLES + (full - TOPDOWN_BE_FULL_PRF_SLOTS));
++
++  int head_state = TOPDOWN_BE_HEAD_EMPTY_SLOTS;
++  Op* head = node->node_head;
++  if (head) {
++    Mem_Type mem_type = head->inst_info->table_info.mem_type;
++    if (head->state == OS_DONE || OP_DONE(head))
++      head_state = TOPDOWN_BE_HEAD_DONE_SLOTS;
++    else if (head->engine_info.l1_miss)
++      head_state = TOPDOWN_BE_HEAD_LLC_MISS_SLOTS;
++    else if (head->engine_info.dcmiss)
++      head_state = TOPDOWN_BE_HEAD_L1D_MISS_SLOTS;
++    else if (ifuse_exec_pair_bypass_ld2_memory_pipeline(head))
++      head_state = TOPDOWN_BE_HEAD_FUSED_LD2_SLOTS;  // Waiting for LD1's data
++    else if (mem_type == MEM_ST)
++      head_state = TOPDOWN_BE_HEAD_STORE_SLOTS;
++    else if (mem_type != NOT_MEM && (head->state == OS_WAIT_DCACHE || head->state == OS_WAIT_MEM))
++      head_state = TOPDOWN_BE_HEAD_DCACHE_PORT_SLOTS;  // No L1-D port or MSHR this cycle
++    else if (mem_type != NOT_MEM && head->state != OS_IN_ROB && head->state != OS_READY &&
++             head->state != OS_LOW_PRIORITY)
++      head_state = TOPDOWN_BE_HEAD_L1D_HIT_SLOTS;  // Issued, hit, and still in flight
++    else if (head->state == OS_IN_ROB)
++      head_state = TOPDOWN_BE_HEAD_IQ_SLOTS;
++    else if (head->state == OS_READY || head->state == OS_LOW_PRIORITY)
++      head_state = TOPDOWN_BE_HEAD_PORT_SLOTS;
++    else if (head->state == OS_SCHEDULED || head->state == OS_TENTATIVE)
++      head_state = TOPDOWN_BE_HEAD_EXEC_SLOTS;
++    else
++      head_state = TOPDOWN_BE_HEAD_DEP_SLOTS;
++  }
++  INC_STAT_EVENT(proc_id, head_state, backend_slots);
++  if (stalled_cycle)
++    STAT_EVENT(proc_id, TOPDOWN_BE_HEAD_LLC_MISS_CYCLES + (head_state - TOPDOWN_BE_HEAD_LLC_MISS_SLOTS));
++}
++
+ void topdown_idq_update(uns proc_id, int count_available, int count_issued, int count_issued_on_path) {
+   INC_STAT_EVENT(proc_id, TOPDOWN_TOTAL_SLOTS, ISSUE_WIDTH);
+   INC_STAT_EVENT(proc_id, TOPDOWN_ISSUED_SLOTS, count_issued);
+@@ -97,6 +162,7 @@ void topdown_idq_update(uns proc_id, int count_available, int count_issued, int
+     ASSERT(proc_id, recovery_cycle > 0);
+     idq_stage_set_recovery_cycle(recovery_cycle - 1);
+     INC_STAT_EVENT(proc_id, TOPDOWN_RECOVERY_BUBBLES_SLOTS, ISSUE_WIDTH - count_available);
++    topdown_backend_attribute(proc_id, MIN2(count_available, (int)ISSUE_WIDTH) - count_issued, FALSE);
+     return;
+   }
+ 
+@@ -108,10 +174,12 @@ void topdown_idq_update(uns proc_id, int count_available, int count_issued, int
+     } else if (!lsq_available(MEM_ST)) {
+       STAT_EVENT(proc_id, TOPDOWN_MEM_STORE_STALLS_CYCLES);
+     }
++    topdown_backend_attribute(proc_id, ISSUE_WIDTH - count_issued, TRUE);
+     return;
+   }
+ 
+   INC_STAT_EVENT(proc_id, TOPDOWN_FETCH_BUBBLES_SLOTS, ISSUE_WIDTH - count_available);
++  topdown_backend_attribute(proc_id, MIN2(count_available, (int)ISSUE_WIDTH) - count_issued, FALSE);
+   if (count_available == 0)
+     STAT_EVENT(proc_id, TOPDOWN_FETCH_BUBBLES_GT_MIW_CYCLES);
+ }
+diff --git a/src/uop_queue_stage.cc b/src/uop_queue_stage.cc
+index 3fa909de..2df9a99a 100644
+--- a/src/uop_queue_stage.cc
++++ b/src/uop_queue_stage.cc
+@@ -26,6 +26,7 @@ extern "C" {
+ #include "uop_cache.h"
+ }
+ #include "ft.h"
++#include "ifuse/ifuse_recovery.h"
+ 
+ // Macros
+ #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_UOP_QUEUE_STAGE, ##args)
+@@ -180,7 +181,8 @@ void recover_uop_queue_stage(void) {
+       if (op && FLUSH_OP(op)) {
+         DEBUG(op->proc_id, "UopQ flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
+         flushed = TRUE;
+-        ASSERT(op->proc_id, op->off_path);
++        ASSERT(op->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
++                                ifuse_recovery_is_flushing());
+         if (op->parent_FT)
+           ft_free_op(op);
+         sd->ops[op_idx] = NULL;

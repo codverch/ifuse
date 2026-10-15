@@ -1,3 +1,21 @@
+# I-Fuse
+
+This repository holds the simulator models behind "I-Fuse: Correlated Load
+Micro-Op Fusion", an HPCA 2027 submission. It is a fork of [Scarab][scarab].
+Each model lives in its own directory and moves here from a branch of an
+older Scarab fork, reviewed on its own:
+
+- [i-fuse/](i-fuse/README.md): I-Fuse, in the paper's 1-cycle-delayed
+  configuration.
+
+Each directory holds its new sources (`src/`), a patch for the shared Scarab
+files it hooks into (`scarab.patch`), the `PARAMS.in` it ran with, and a
+`Makefile` that applies both to the upstream Scarab commit the model was
+developed on and builds it. The rest of this tree is Scarab, and its README
+follows.
+
+[scarab]: https://github.com/litz-lab/scarab
+
 # Scarab Quick Start Guide
 Install:
 1. Install exact PIN version ([PIN 3.15](https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-binary-instrumentation-tool-downloads.html))
