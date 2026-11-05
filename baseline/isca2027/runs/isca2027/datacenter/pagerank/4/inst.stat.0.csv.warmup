@@ -1,0 +1,403 @@
+Core, 0, 0
+Cumulative_Cycles, 0, 4910592             
+Cumulative_Instructions, 0, 20000002            
+Periodic_Cycles, 0, 4910592             
+Periodic_Instructions, 0, 20000002            
+ST_OP_INV_count, 521,             0
+ST_OP_INV_total_count, 521,             0
+
+ST_OP_NOP_count, 521,        183325
+ST_OP_NOP_total_count, 521,        183325
+
+ST_OP_CF_count, 521,       4460717
+ST_OP_CF_total_count, 521,       4460717
+
+ST_OP_MOV_count, 521,       2341073
+ST_OP_MOV_total_count, 521,       2341073
+
+ST_OP_CMOV_count, 521,         42252
+ST_OP_CMOV_total_count, 521,         42252
+
+ST_OP_LDA_count, 521,       1360461
+ST_OP_LDA_total_count, 521,       1360461
+
+ST_OP_ILD_count, 521,       4670073
+ST_OP_ILD_total_count, 521,       4670073
+
+ST_OP_IST_count, 521,       2779580
+ST_OP_IST_total_count, 521,       2779580
+
+ST_OP_IADD_count, 521,       2372200
+ST_OP_IADD_total_count, 521,       2372200
+
+ST_OP_IMUL_count, 521,        118766
+ST_OP_IMUL_total_count, 521,        118766
+
+ST_OP_IDIV_count, 521,             0
+ST_OP_IDIV_total_count, 521,             0
+
+ST_OP_ICMP_count, 521,       2497974
+ST_OP_ICMP_total_count, 521,       2497974
+
+ST_OP_LOGIC_count, 521,       1940314
+ST_OP_LOGIC_total_count, 521,       1940314
+
+ST_OP_SHIFT_count, 521,             0
+ST_OP_SHIFT_total_count, 521,             0
+
+ST_OP_FLD_count, 521,         42291
+ST_OP_FLD_total_count, 521,         42291
+
+ST_OP_FST_count, 521,         56453
+ST_OP_FST_total_count, 521,         56453
+
+ST_OP_FCVT_count, 521,             0
+ST_OP_FCVT_total_count, 521,             0
+
+ST_OP_FADD_count, 521,             0
+ST_OP_FADD_total_count, 521,             0
+
+ST_OP_FMUL_count, 521,             0
+ST_OP_FMUL_total_count, 521,             0
+
+ST_OP_FMA_count, 521,             0
+ST_OP_FMA_total_count, 521,             0
+
+ST_OP_FDIV_count, 521,             0
+ST_OP_FDIV_total_count, 521,             0
+
+ST_OP_FCMP_count, 521,             0
+ST_OP_FCMP_total_count, 521,             0
+
+ST_OP_FCMOV_count, 521,             0
+ST_OP_FCMOV_total_count, 521,             0
+
+ST_OP_GATHER_count, 521,             0
+ST_OP_GATHER_total_count, 521,             0
+
+ST_OP_SCATTER_count, 521,             0
+ST_OP_SCATTER_total_count, 521,             0
+
+ST_OP_PIPELINED_FAST_count, 521,             0
+ST_OP_PIPELINED_FAST_total_count, 521,             0
+
+ST_OP_PIPELINED_MEDIUM_count, 521,             0
+ST_OP_PIPELINED_MEDIUM_total_count, 521,             0
+
+ST_OP_PIPELINED_SLOW_count, 521,             0
+ST_OP_PIPELINED_SLOW_total_count, 521,             0
+
+ST_OP_NOTPIPELINED_MEDIUM_count, 521,             0
+ST_OP_NOTPIPELINED_MEDIUM_total_count, 521,             0
+
+ST_OP_NOTPIPELINED_SLOW_count, 521,             0
+ST_OP_NOTPIPELINED_SLOW_total_count, 521,             0
+
+ST_OP_NOTPIPELINED_VERY_SLOW_count, 521,             0
+ST_OP_NOTPIPELINED_VERY_SLOW_total_count, 521,             0
+
+ST_NOT_CF_count, 522,      18404762
+ST_NOT_CF_total_count, 522,      18404762
+
+ST_CF_BR_count, 522,        281718
+ST_CF_BR_total_count, 522,        281718
+
+ST_CF_CBR_count, 522,       3812429
+ST_CF_CBR_total_count, 522,       3812429
+
+ST_CF_REP_count, 522,             0
+ST_CF_REP_total_count, 522,             0
+
+ST_CF_CALL_count, 522,        155001
+ST_CF_CALL_total_count, 522,        155001
+
+ST_CF_IBR_count, 522,         56374
+ST_CF_IBR_total_count, 522,         56374
+
+ST_CF_ICALL_count, 522,            78
+ST_CF_ICALL_total_count, 522,            78
+
+ST_CF_ICO_count, 522,             0
+ST_CF_ICO_total_count, 522,             0
+
+ST_CF_RET_count, 522,        155079
+ST_CF_RET_total_count, 522,        155079
+
+ST_CF_SYS_count, 522,            38
+ST_CF_SYS_total_count, 522,            38
+
+REP_FIRST_count, 0,             0
+REP_FIRST_total_count, 0,             0
+
+ST_BAR_NONE_count, 523,      22865441
+ST_BAR_NONE_total_count, 523,      22865441
+
+ST_BAR_FETCH_count, 523,            38
+ST_BAR_FETCH_total_count, 523,            38
+
+ST_BAR_ISSUE_count, 523,             0
+ST_BAR_ISSUE_total_count, 523,             0
+
+ST_BAR_BOTH_count, 523,             0
+ST_BAR_BOTH_total_count, 523,             0
+
+ST_NOT_MEM_count, 524,      15317082
+ST_NOT_MEM_total_count, 524,      15317082
+
+ST_MEM_LD_count, 524,       4712364
+ST_MEM_LD_total_count, 524,       4712364
+
+ST_MEM_ST_count, 524,       2836033
+ST_MEM_ST_total_count, 524,       2836033
+
+ST_MEM_PF_count, 524,             0
+ST_MEM_PF_total_count, 524,             0
+
+ST_MEM_WH_count, 524,             0
+ST_MEM_WH_total_count, 524,             0
+
+ST_MEM_EVICT_count, 524,             0
+ST_MEM_EVICT_total_count, 524,             0
+
+ST_NOT_MEM_OFFPATH_count, 525,       5167513
+ST_NOT_MEM_OFFPATH_total_count, 525,       5167513
+
+ST_MEM_LD_OFFPATH_count, 525,        824433
+ST_MEM_LD_OFFPATH_total_count, 525,        824433
+
+ST_MEM_ST_OFFPATH_count, 525,        643009
+ST_MEM_ST_OFFPATH_total_count, 525,        643009
+
+ST_MEM_PF_OFFPATH_count, 525,             0
+ST_MEM_PF_OFFPATH_total_count, 525,             0
+
+ST_MEM_WH_OFFPATH_count, 525,             0
+ST_MEM_WH_OFFPATH_total_count, 525,             0
+
+ST_MEM_EVIC_OFFPATHT_count, 525,             0
+ST_MEM_EVIC_OFFPATHT_total_count, 525,             0
+
+ST_OP_ONPATH_count, 0,      22865479
+ST_OP_ONPATH_total_count, 0,      22865479
+
+ST_OP_OFFPATH_count, 0,       6634955
+ST_OP_OFFPATH_total_count, 0,       6634955
+
+ST_FAKE_OP_OFFPATH_count, 526,       2095588
+ST_FAKE_OP_OFFPATH_total_count, 526,       2095588
+
+ST_NOT_FAKE_OP_OFFPATH_count, 526,       4539367
+ST_NOT_FAKE_OP_OFFPATH_total_count, 526,       4539367
+
+ST_FAKE_REASON_NOT_FAKE_count, 527,       4539367
+ST_FAKE_REASON_NOT_FAKE_total_count, 527,       4539367
+
+ST_FAKE_REASON_REDIRECT_TO_NOT_INSTRUMENTED_count, 527,       2095588
+ST_FAKE_REASON_REDIRECT_TO_NOT_INSTRUMENTED_total_count, 527,       2095588
+
+ST_FAKE_REASON_RETURN_TO_NOT_INSTRUMENTED_count, 527,             0
+ST_FAKE_REASON_RETURN_TO_NOT_INSTRUMENTED_total_count, 527,             0
+
+ST_FAKE_REASON_NONRET_CF_TO_NOT_INSTRUMENTED_count, 527,             0
+ST_FAKE_REASON_NONRET_CF_TO_NOT_INSTRUMENTED_total_count, 527,             0
+
+ST_FAKE_REASON_NOT_TAKEN_TO_NOT_INSTRUMENTED_count, 527,             0
+ST_FAKE_REASON_NOT_TAKEN_TO_NOT_INSTRUMENTED_total_count, 527,             0
+
+ST_FAKE_REASON_WRONG_PATH_STORE_TO_NEW_REGION_count, 527,             0
+ST_FAKE_REASON_WRONG_PATH_STORE_TO_NEW_REGION_total_count, 527,             0
+
+ST_INST_ONPATH_count, 0,      20000276
+ST_INST_ONPATH_total_count, 0,      20000276
+
+ST_INST_OFFPATH_count, 0,       6196844
+ST_INST_OFFPATH_total_count, 0,       6196844
+
+STATIC_PIN_NOP_count, 0,             0
+STATIC_PIN_NOP_total_count, 0,             0
+
+DYNAMIC_PIN_REP_GREATER_256_count, 0,             0
+DYNAMIC_PIN_REP_GREATER_256_total_count, 0,             0
+
+INST_MAP_UPDATE_JITTED_count, 528,             0
+INST_MAP_UPDATE_JITTED_total_count, 528,             0
+
+INST_MAP_UPDATE_ENCODING_count, 528,           199
+INST_MAP_UPDATE_ENCODING_total_count, 528,           199
+
+INST_MAP_UPDATE_NPC_INV_count, 528,             0
+INST_MAP_UPDATE_NPC_INV_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_NOP_count, 528,             0
+INST_MAP_UPDATE_NPC_NOP_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_CF_count, 528,             0
+INST_MAP_UPDATE_NPC_CF_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_MOV_count, 528,             0
+INST_MAP_UPDATE_NPC_MOV_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_CMOV_count, 528,             0
+INST_MAP_UPDATE_NPC_CMOV_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_LDA_count, 528,             0
+INST_MAP_UPDATE_NPC_LDA_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_IMEM_count, 528,             0
+INST_MAP_UPDATE_NPC_IMEM_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_IADD_count, 528,             0
+INST_MAP_UPDATE_NPC_IADD_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_IMUL_count, 528,        309929
+INST_MAP_UPDATE_NPC_IMUL_total_count, 528,        309929
+
+INST_MAP_UPDATE_NPC_IDIV_count, 528,             0
+INST_MAP_UPDATE_NPC_IDIV_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_ICMP_count, 528,             0
+INST_MAP_UPDATE_NPC_ICMP_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_LOGIC_count, 528,             0
+INST_MAP_UPDATE_NPC_LOGIC_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_SHIFT_count, 528,             0
+INST_MAP_UPDATE_NPC_SHIFT_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FMEM_count, 528,             0
+INST_MAP_UPDATE_NPC_FMEM_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FCVT_count, 528,             0
+INST_MAP_UPDATE_NPC_FCVT_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FADD_count, 528,             0
+INST_MAP_UPDATE_NPC_FADD_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FMUL_count, 528,             0
+INST_MAP_UPDATE_NPC_FMUL_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FMA_count, 528,             0
+INST_MAP_UPDATE_NPC_FMA_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FDIV_count, 528,             0
+INST_MAP_UPDATE_NPC_FDIV_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FCMP_count, 528,             0
+INST_MAP_UPDATE_NPC_FCMP_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_FCMOV_count, 528,             0
+INST_MAP_UPDATE_NPC_FCMOV_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_GATHER_count, 528,             0
+INST_MAP_UPDATE_NPC_GATHER_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_SCATTER_count, 528,             0
+INST_MAP_UPDATE_NPC_SCATTER_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_PIPELINED_FAST_count, 528,             0
+INST_MAP_UPDATE_NPC_PIPELINED_FAST_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_PIPELINED_MEDIUM_count, 528,             0
+INST_MAP_UPDATE_NPC_PIPELINED_MEDIUM_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_PIPELINED_SLOW_count, 528,             0
+INST_MAP_UPDATE_NPC_PIPELINED_SLOW_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_NOTPIPELINED_MEDIUM_count, 528,             0
+INST_MAP_UPDATE_NPC_NOTPIPELINED_MEDIUM_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_NOTPIPELINED_SLOW_count, 528,             0
+INST_MAP_UPDATE_NPC_NOTPIPELINED_SLOW_total_count, 528,             0
+
+INST_MAP_UPDATE_NPC_NOTPIPELINED_VERY_SLOW_count, 528,             0
+INST_MAP_UPDATE_NPC_NOTPIPELINED_VERY_SLOW_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_INV_count, 528,             0
+INST_MAP_UPDATE_MEM_INV_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_NOP_count, 528,        183310
+INST_MAP_UPDATE_MEM_NOP_total_count, 528,        183310
+
+INST_MAP_UPDATE_MEM_CF_count, 528,             0
+INST_MAP_UPDATE_MEM_CF_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_MOV_count, 528,       7319839
+INST_MAP_UPDATE_MEM_MOV_total_count, 528,       7319839
+
+INST_MAP_UPDATE_MEM_CMOV_count, 528,         42249
+INST_MAP_UPDATE_MEM_CMOV_total_count, 528,         42249
+
+INST_MAP_UPDATE_MEM_LDA_count, 528,       1360416
+INST_MAP_UPDATE_MEM_LDA_total_count, 528,       1360416
+
+INST_MAP_UPDATE_MEM_IMEM_count, 528,             0
+INST_MAP_UPDATE_MEM_IMEM_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_IADD_count, 528,             0
+INST_MAP_UPDATE_MEM_IADD_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_IMUL_count, 528,       6212432
+INST_MAP_UPDATE_MEM_IMUL_total_count, 528,       6212432
+
+INST_MAP_UPDATE_MEM_IDIV_count, 528,        118764
+INST_MAP_UPDATE_MEM_IDIV_total_count, 528,        118764
+
+INST_MAP_UPDATE_MEM_ICMP_count, 528,             0
+INST_MAP_UPDATE_MEM_ICMP_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_LOGIC_count, 528,       2497875
+INST_MAP_UPDATE_MEM_LOGIC_total_count, 528,       2497875
+
+INST_MAP_UPDATE_MEM_SHIFT_count, 528,       1940210
+INST_MAP_UPDATE_MEM_SHIFT_total_count, 528,       1940210
+
+INST_MAP_UPDATE_MEM_FMEM_count, 528,             0
+INST_MAP_UPDATE_MEM_FMEM_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FCVT_count, 528,             0
+INST_MAP_UPDATE_MEM_FCVT_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FADD_count, 528,             0
+INST_MAP_UPDATE_MEM_FADD_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FMUL_count, 528,             0
+INST_MAP_UPDATE_MEM_FMUL_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FMA_count, 528,             0
+INST_MAP_UPDATE_MEM_FMA_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FDIV_count, 528,             0
+INST_MAP_UPDATE_MEM_FDIV_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FCMP_count, 528,             0
+INST_MAP_UPDATE_MEM_FCMP_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_FCMOV_count, 528,             0
+INST_MAP_UPDATE_MEM_FCMOV_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_GATHER_count, 528,             0
+INST_MAP_UPDATE_MEM_GATHER_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_SCATTER_count, 528,             0
+INST_MAP_UPDATE_MEM_SCATTER_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_PIPELINED_FAST_count, 528,             0
+INST_MAP_UPDATE_MEM_PIPELINED_FAST_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_PIPELINED_MEDIUM_count, 528,             0
+INST_MAP_UPDATE_MEM_PIPELINED_MEDIUM_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_PIPELINED_SLOW_count, 528,         14197
+INST_MAP_UPDATE_MEM_PIPELINED_SLOW_total_count, 528,         14197
+
+INST_MAP_UPDATE_MEM_NOTPIPELINED_MEDIUM_count, 528,             0
+INST_MAP_UPDATE_MEM_NOTPIPELINED_MEDIUM_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_NOTPIPELINED_SLOW_count, 528,             0
+INST_MAP_UPDATE_MEM_NOTPIPELINED_SLOW_total_count, 528,             0
+
+INST_MAP_UPDATE_MEM_NOTPIPELINED_VERY_SLOW_count, 528,             0
+INST_MAP_UPDATE_MEM_NOTPIPELINED_VERY_SLOW_total_count, 528,             0
+
+
+

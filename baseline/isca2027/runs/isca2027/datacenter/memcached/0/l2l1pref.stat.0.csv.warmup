@@ -1,0 +1,244 @@
+Core, 0, 0
+Cumulative_Cycles, 0, 16500937            
+Cumulative_Instructions, 0, 20000000            
+Periodic_Cycles, 0, 16500937            
+Periodic_Instructions, 0, 20000000            
+L2WAY_FILL_L1_count, 0,             0
+L2WAY_FILL_L1_total_count, 0,             0
+
+L2WAY_WAY_HIT_count, 547,             0
+L2WAY_WAY_HIT_total_count, 547,             0
+
+L2WAY_WAY_MISS_count, 547,             0
+L2WAY_WAY_MISS_total_count, 547,             0
+
+L2WAY_PREF_REQ_count, 0,             0
+L2WAY_PREF_REQ_total_count, 0,             0
+
+L2WAY_PREF_HIT_DATA_IN_CACHE_count, 548,             0
+L2WAY_PREF_HIT_DATA_IN_CACHE_total_count, 548,             0
+
+L2WAY_PREF_HIT_DATA_REQ_count, 548,             0
+L2WAY_PREF_HIT_DATA_REQ_total_count, 548,             0
+
+L2WAY_TRAIN_HIT_count, 549,             0
+L2WAY_TRAIN_HIT_total_count, 549,             0
+
+L2WAY_TRAIN_MISS_count, 549,             0
+L2WAY_TRAIN_MISS_total_count, 549,             0
+
+L1_HIT_REQ_TYPE_IFETCH_count, 550,             0
+L1_HIT_REQ_TYPE_IFETCH_total_count, 550,             0
+
+L1_HIT_REQ_TYPE_DFETCH_count, 550,             0
+L1_HIT_REQ_TYPE_DFETCH_total_count, 550,             0
+
+L1_HIT_REQ_TYPE_DSTORE_count, 550,             0
+L1_HIT_REQ_TYPE_DSTORE_total_count, 550,             0
+
+L1_HIT_REQ_TYPE_IPRF_count, 550,             0
+L1_HIT_REQ_TYPE_IPRF_total_count, 550,             0
+
+L1_HIT_REQ_TYPE_DPRF_count, 550,             0
+L1_HIT_REQ_TYPE_DPRF_total_count, 550,             0
+
+L1_HIT_REQ_TYPE_WB_count, 550,             0
+L1_HIT_REQ_TYPE_WB_total_count, 550,             0
+
+L2_ACCESS_INTERVAL__0_count, 551,             0
+L2_ACCESS_INTERVAL__0_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__1_count, 551,             0
+L2_ACCESS_INTERVAL__1_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__2_count, 551,             0
+L2_ACCESS_INTERVAL__2_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__3_count, 551,             0
+L2_ACCESS_INTERVAL__3_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__4_count, 551,             0
+L2_ACCESS_INTERVAL__4_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__5_count, 551,             0
+L2_ACCESS_INTERVAL__5_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__6_count, 551,             0
+L2_ACCESS_INTERVAL__6_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__7_count, 551,             0
+L2_ACCESS_INTERVAL__7_total_count, 551,             0
+
+L2_ACCESS_INTERVAL__8_count, 551,             0
+L2_ACCESS_INTERVAL__8_total_count, 551,             0
+
+L2WAY_L1INSERT_PORT_FULL_count, 552,             0
+L2WAY_L1INSERT_PORT_FULL_total_count, 552,             0
+
+L2WAY_L1INSERT_PORT_READY_count, 552,             0
+L2WAY_L1INSERT_PORT_READY_total_count, 552,             0
+
+L2MARKV_NEXT_ADDR_HIT_count, 553,             0
+L2MARKV_NEXT_ADDR_HIT_total_count, 553,             0
+
+L2MARKV_NEXT_ADDR_MISS_count, 553,             0
+L2MARKV_NEXT_ADDR_MISS_total_count, 553,             0
+
+L2MARKV_LAST_ADDR_HIT_count, 554,             0
+L2MARKV_LAST_ADDR_HIT_total_count, 554,             0
+
+L2MARKV_LAST_ADDR_MISS_count, 554,             0
+L2MARKV_LAST_ADDR_MISS_total_count, 554,             0
+
+MARKV_L2_TIME_DIFF__0_count, 555,             0
+MARKV_L2_TIME_DIFF__0_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__1_count, 555,             0
+MARKV_L2_TIME_DIFF__1_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__2_count, 555,             0
+MARKV_L2_TIME_DIFF__2_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__3_count, 555,             0
+MARKV_L2_TIME_DIFF__3_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__4_count, 555,             0
+MARKV_L2_TIME_DIFF__4_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__5_count, 555,             0
+MARKV_L2_TIME_DIFF__5_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__6_count, 555,             0
+MARKV_L2_TIME_DIFF__6_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__7_count, 555,             0
+MARKV_L2_TIME_DIFF__7_total_count, 555,             0
+
+MARKV_L2_TIME_DIFF__8_count, 555,             0
+MARKV_L2_TIME_DIFF__8_total_count, 555,             0
+
+L2MARKV_PREF_REQ_count, 0,             0
+L2MARKV_PREF_REQ_total_count, 0,             0
+
+L2MARKV_PREF_TRAIN_count, 0,             0
+L2MARKV_PREF_TRAIN_total_count, 0,             0
+
+L2MARKV_PREF_HIT_DATA_REQ_count, 556,             0
+L2MARKV_PREF_HIT_DATA_REQ_total_count, 556,             0
+
+L2MARKV_PREF_HIT_DATA_IN_CACHE_count, 556,             0
+L2MARKV_PREF_HIT_DATA_IN_CACHE_total_count, 556,             0
+
+L2MARKV_PREF_MISS_count, 556,             0
+L2MARKV_PREF_MISS_total_count, 556,             0
+
+L2MARKV_L1INSERT_PORT_READY_count, 557,             0
+L2MARKV_L1INSERT_PORT_READY_total_count, 557,             0
+
+L2MARKV_L1INSERT_PORT_FULL_count, 557,             0
+L2MARKV_L1INSERT_PORT_FULL_total_count, 557,             0
+
+L2NEXT_PREF_REQ_count, 0,             0
+L2NEXT_PREF_REQ_total_count, 0,             0
+
+L2NEXT_PREF_HIT_DATA_REQ_count, 558,             0
+L2NEXT_PREF_HIT_DATA_REQ_total_count, 558,             0
+
+L2NEXT_PREF_HIT_DATA_IN_CACHE_count, 558,             0
+L2NEXT_PREF_HIT_DATA_IN_CACHE_total_count, 558,             0
+
+L2NEXT_PREF_MISS_count, 558,             0
+L2NEXT_PREF_MISS_total_count, 558,             0
+
+L2NEXT_L1INSERT_PORT_READY_count, 559,             0
+L2NEXT_L1INSERT_PORT_READY_total_count, 559,             0
+
+L2NEXT_L1INSERT_PORT_FULL_count, 559,             0
+L2NEXT_L1INSERT_PORT_FULL_total_count, 559,             0
+
+DCACHE_PREF_NOT_RDY_count, 560,             0
+DCACHE_PREF_NOT_RDY_total_count, 560,             0
+
+DCACHE_PREF_FETCH_10_count, 560,             0
+DCACHE_PREF_FETCH_10_total_count, 560,             0
+
+DCACHE_PREF_FETCH_100_count, 560,             0
+DCACHE_PREF_FETCH_100_total_count, 560,             0
+
+DCACHE_PREF_FETCH_1000_count, 560,             0
+DCACHE_PREF_FETCH_1000_total_count, 560,             0
+
+DCACHE_PREF_FETCH_10000_count, 560,             0
+DCACHE_PREF_FETCH_10000_total_count, 560,             0
+
+DCACHE_PREF_FETCH_100000_count, 560,             0
+DCACHE_PREF_FETCH_100000_total_count, 560,             0
+
+DCACHE_PREF_FETCH_1000000_count, 560,             0
+DCACHE_PREF_FETCH_1000000_total_count, 560,             0
+
+DCACHE_PREF_FETCH_10000000_count, 560,             0
+DCACHE_PREF_FETCH_10000000_total_count, 560,             0
+
+DCACHE_PREF_FETCH_100000000_count, 560,             0
+DCACHE_PREF_FETCH_100000000_total_count, 560,             0
+
+DCACHE_PREF_FETCH_MORE_count, 560,             0
+DCACHE_PREF_FETCH_MORE_total_count, 560,             0
+
+L2HIT_SAME_IP_DELTA__0_count, 561,             0
+L2HIT_SAME_IP_DELTA__0_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__1_count, 561,             0
+L2HIT_SAME_IP_DELTA__1_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__2_count, 561,             0
+L2HIT_SAME_IP_DELTA__2_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__3_count, 561,             0
+L2HIT_SAME_IP_DELTA__3_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__4_count, 561,             0
+L2HIT_SAME_IP_DELTA__4_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__5_count, 561,             0
+L2HIT_SAME_IP_DELTA__5_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__6_count, 561,             0
+L2HIT_SAME_IP_DELTA__6_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__7_count, 561,             0
+L2HIT_SAME_IP_DELTA__7_total_count, 561,             0
+
+L2HIT_SAME_IP_DELTA__8_count, 561,             0
+L2HIT_SAME_IP_DELTA__8_total_count, 561,             0
+
+L2HIT_IP_HIT_COUNT__1_count, 562,             0
+L2HIT_IP_HIT_COUNT__1_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__2_count, 562,             0
+L2HIT_IP_HIT_COUNT__2_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__3_count, 562,             0
+L2HIT_IP_HIT_COUNT__3_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__4_count, 562,             0
+L2HIT_IP_HIT_COUNT__4_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__5_count, 562,             0
+L2HIT_IP_HIT_COUNT__5_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__6_count, 562,             0
+L2HIT_IP_HIT_COUNT__6_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__7_count, 562,             0
+L2HIT_IP_HIT_COUNT__7_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__8_count, 562,             0
+L2HIT_IP_HIT_COUNT__8_total_count, 562,             0
+
+L2HIT_IP_HIT_COUNT__9_count, 562,             0
+L2HIT_IP_HIT_COUNT__9_total_count, 562,             0
+
+
+

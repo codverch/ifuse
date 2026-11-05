@@ -1,0 +1,2485 @@
+Core, 0, 0
+Cumulative_Cycles, 0, 11163821            
+Cumulative_Instructions, 0, 30000000            
+Periodic_Cycles, 0, 3640660             
+Periodic_Instructions, 0, 9999996             
+EXECUTION_TIME_count, 0, 1137706250000
+EXECUTION_TIME_total_count, 0, 3488694062500
+
+SIM_HOST_WALL_SECONDS_value, 0,    115.397049
+SIM_HOST_WALL_SECONDS_total_value, 0,    115.397049
+
+NODE_CYCLE_count, 0,       3640660
+NODE_CYCLE_total_count, 0,      11163821
+
+NODE_INST_COUNT_count, 0,       9999996
+NODE_INST_COUNT_total_count, 0,      30000000
+
+NODE_INST_COUNT_FETCHED_count, 0,       9999996
+NODE_INST_COUNT_FETCHED_total_count, 0,      30000000
+
+NODE_UOP_COUNT_count, 0,      11694512
+NODE_UOP_COUNT_total_count, 0,      35083440
+
+EXEC_STAGE_NO_ISSUE_STALL_CYCLE_count, 0,       2824042
+EXEC_STAGE_NO_ISSUE_STALL_CYCLE_total_count, 0,       8509496
+
+EXEC_STAGE_NO_ISSUE_STALL_CYCLE_ONPATH_count, 0,       2819594
+EXEC_STAGE_NO_ISSUE_STALL_CYCLE_ONPATH_total_count, 0,       8494237
+
+FULL_WINDOW_STALL_count, 0,             0
+FULL_WINDOW_STALL_pct, 0,        0.000
+FULL_WINDOW_STALL_total_count, 0,           293
+FULL_WINDOW_STALL_total_pct, 0,        0.003
+
+FULL_WINDOW_MEM_OP_count, 475,             0
+FULL_WINDOW_MEM_OP_total_count, 475,           278
+
+FULL_WINDOW_FP_OP_count, 475,             0
+FULL_WINDOW_FP_OP_total_count, 475,             0
+
+FULL_WINDOW_OTHER_OP_count, 475,             0
+FULL_WINDOW_OTHER_OP_total_count, 475,             0
+
+RET_BLOCKED_DC_MISS_count, 0,       1040057
+RET_BLOCKED_DC_MISS_pct, 0,       28.568
+RET_BLOCKED_DC_MISS_total_count, 0,       3397640
+RET_BLOCKED_DC_MISS_total_pct, 0,       30.434
+
+RET_BLOCKED_L1_MISS_count, 0,        292823
+RET_BLOCKED_L1_MISS_pct, 0,        8.043
+RET_BLOCKED_L1_MISS_total_count, 0,       1101771
+RET_BLOCKED_L1_MISS_total_pct, 0,        9.869
+
+RET_BLOCKED_L1_MISS_BW_PREF_count, 0,         10131
+RET_BLOCKED_L1_MISS_BW_PREF_pct, 0,        0.278
+RET_BLOCKED_L1_MISS_BW_PREF_total_count, 0,         15999
+RET_BLOCKED_L1_MISS_BW_PREF_total_pct, 0,        0.143
+
+RET_BLOCKED_L1_ACCESS_count, 0,        753694
+RET_BLOCKED_L1_ACCESS_pct, 0,       20.702
+RET_BLOCKED_L1_ACCESS_total_count, 0,       2315335
+RET_BLOCKED_L1_ACCESS_total_pct, 0,       20.740
+
+RET_BLOCKED_MEM_STALL_count, 0,        292823
+RET_BLOCKED_MEM_STALL_pct, 0,        8.043
+RET_BLOCKED_MEM_STALL_total_count, 0,       1101794
+RET_BLOCKED_MEM_STALL_total_pct, 0,        9.869
+
+RET_BLOCKED_OFFCHIP_DEMAND_count, 0,             0
+RET_BLOCKED_OFFCHIP_DEMAND_pct, 0,        0.000
+RET_BLOCKED_OFFCHIP_DEMAND_total_count, 0,             0
+RET_BLOCKED_OFFCHIP_DEMAND_total_pct, 0,        0.000
+
+OP_ISSUED_count, 0,      11702720
+OP_ISSUED_total_count, 0,      35114382
+
+OP_RETIRED_count, 0,      11694512
+OP_RETIRED_total_count, 0,      35083440
+
+OP_MACRO_FUSION_ONPATH_count, 0,       1488519
+OP_MACRO_FUSION_ONPATH_total_count, 0,       4469844
+
+OP_MACRO_FUSION_OFFPATH_count, 0,          3452
+OP_MACRO_FUSION_OFFPATH_total_count, 0,         11493
+
+REPLAY_SIGNALED_count, 0,             0
+REPLAY_SIGNALED_total_count, 0,             0
+
+REPLAY_COUNTED_count, 0,             0
+REPLAY_COUNTED_total_count, 0,             0
+
+OFF_CRITICAL_PATH_count, 476,             0
+OFF_CRITICAL_PATH_total_count, 476,             0
+
+ON_CRITICAL_PATH_count, 476,             0
+ON_CRITICAL_PATH_total_count, 476,             0
+
+LD_NO_DEPENDENTS_count, 477,        241914
+LD_NO_DEPENDENTS_total_count, 477,        725973
+
+LD_DEPENDENTS_count, 477,       1679580
+LD_DEPENDENTS_total_count, 477,       5039107
+
+LD_EXEC_CYCLES_0_count, 478,             0
+LD_EXEC_CYCLES_0_total_count, 478,             0
+
+LD_EXEC_CYCLES_1_count, 478,             0
+LD_EXEC_CYCLES_1_total_count, 478,             0
+
+LD_EXEC_CYCLES_2_count, 478,             0
+LD_EXEC_CYCLES_2_total_count, 478,             0
+
+LD_EXEC_CYCLES_3_count, 478,           225
+LD_EXEC_CYCLES_3_total_count, 478,           963
+
+LD_EXEC_CYCLES_4_count, 478,           317
+LD_EXEC_CYCLES_4_total_count, 478,          1247
+
+ICACHE_STAGE_STARVED_count, 479,          1796
+ICACHE_STAGE_STARVED_total_count, 479,          8152
+
+ICACHE_STAGE_NOT_STARVED_count, 479,       3618897
+ICACHE_STAGE_NOT_STARVED_total_count, 479,      11088825
+
+ICACHE_STAGE_STALLED_count, 480,       2066403
+ICACHE_STAGE_STALLED_total_count, 480,       6429593
+
+ICACHE_STAGE_NOT_STALLED_count, 480,       1554290
+ICACHE_STAGE_NOT_STALLED_total_count, 480,       4667384
+
+ICACHE_STAGE_OFF_PATH_count, 480,         19967
+ICACHE_STAGE_OFF_PATH_total_count, 480,         66844
+
+DECODE_STAGE_STARVED_count, 481,       3637114
+DECODE_STAGE_STARVED_total_count, 481,      11149399
+
+DECODE_STAGE_NOT_STARVED_count, 481,          1194
+DECODE_STAGE_NOT_STARVED_total_count, 481,          3830
+
+DECODE_STAGE_STALLED_count, 482,          2155
+DECODE_STAGE_STALLED_total_count, 482,          7398
+
+DECODE_STAGE_NOT_STALLED_count, 482,       3636153
+DECODE_STAGE_NOT_STALLED_total_count, 482,      11145831
+
+DECODE_STAGE_OFF_PATH_count, 482,          2352
+DECODE_STAGE_OFF_PATH_total_count, 482,         10592
+
+UOPQ_STAGE_STARVED_count, 483,          6811
+UOPQ_STAGE_STARVED_total_count, 483,         27448
+
+UOPQ_STAGE_NOT_STARVED_count, 483,       1550764
+UOPQ_STAGE_NOT_STARVED_total_count, 483,       4653192
+
+UOPQ_STAGE_STALLED_count, 484,       2065713
+UOPQ_STAGE_STALLED_total_count, 484,       6427534
+
+UOPQ_STAGE_NOT_STALLED_count, 484,       1557575
+UOPQ_STAGE_NOT_STALLED_total_count, 484,       4680640
+
+UOPQ_STAGE_OFF_PATH_count, 484,         17372
+UOPQ_STAGE_OFF_PATH_total_count, 484,         55647
+
+ISSUE_QUEUE_MATCHING_UNPICK_count, 0,             0
+ISSUE_QUEUE_MATCHING_UNPICK_total_count, 0,             0
+
+ISSUE_QUEUE_MATCHING_UNPICK_WITHIN_QUEUE_count, 0,             0
+ISSUE_QUEUE_MATCHING_UNPICK_WITHIN_QUEUE_total_count, 0,             0
+
+ISSUE_QUEUE_MATCHING_UNPICK_ACROSS_QUEUES_count, 0,             0
+ISSUE_QUEUE_MATCHING_UNPICK_ACROSS_QUEUES_total_count, 0,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_CYCLE_count, 0,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_CYCLE_total_count, 0,             0
+
+ISSUE_QUEUE_OP_READY_REG_READ_TOTAL_count, 0,             0
+ISSUE_QUEUE_OP_READY_REG_READ_TOTAL_pct, 0,         -nan
+ISSUE_QUEUE_OP_READY_REG_READ_TOTAL_total_count, 0,             0
+ISSUE_QUEUE_OP_READY_REG_READ_TOTAL_total_pct, 0,         -nan
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_TOTAL_count, 0,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_TOTAL_pct, 0,         -nan
+ISSUE_QUEUE_OP_ISSUED_REG_READ_TOTAL_total_count, 0,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_TOTAL_total_pct, 0,         -nan
+
+ISSUE_QUEUE_OP_READY_REG_READ_SHARED_count, 0,             0
+ISSUE_QUEUE_OP_READY_REG_READ_SHARED_pct, 0,         -nan
+ISSUE_QUEUE_OP_READY_REG_READ_SHARED_total_count, 0,             0
+ISSUE_QUEUE_OP_READY_REG_READ_SHARED_total_pct, 0,         -nan
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_SHARED_count, 0,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_SHARED_pct, 0,         -nan
+ISSUE_QUEUE_OP_ISSUED_REG_READ_SHARED_total_count, 0,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_SHARED_total_pct, 0,         -nan
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_0_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_0_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_1_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_1_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_2_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_2_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_3_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_3_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_4_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_4_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_5_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_5_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_6_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_6_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_7_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_7_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_8_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_8_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_9_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_9_total_count, 485,             0
+
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_10_PLUS_count, 485,             0
+ISSUE_QUEUE_OP_ISSUED_REG_READ_COUNT_10_PLUS_total_count, 485,             0
+
+ISSUE_QUEUE_OP_READY_count, 0,             0
+ISSUE_QUEUE_OP_READY_total_count, 0,             0
+
+ISSUE_QUEUE_OP_READY_UNISSUED_TOTAL_count, 0,             0
+ISSUE_QUEUE_OP_READY_UNISSUED_TOTAL_total_count, 0,             0
+
+ISSUE_QUEUE_0_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_0_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_1_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_1_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_2_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_2_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_3_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_3_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_4_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_4_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_5_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_5_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_6_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_6_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_7_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_7_OP_READY_UNISSUED_total_count, 0,             0
+
+ISSUE_QUEUE_7_PLUS_OP_READY_UNISSUED_count, 0,             0
+ISSUE_QUEUE_7_PLUS_OP_READY_UNISSUED_total_count, 0,             0
+
+ST_OP_INV_READY_count, 486,             0
+ST_OP_INV_READY_total_count, 486,             0
+
+ST_OP_NOP_READY_count, 486,             0
+ST_OP_NOP_READY_total_count, 486,             0
+
+ST_OP_CF_READY_count, 486,             0
+ST_OP_CF_READY_total_count, 486,             0
+
+ST_OP_MOV_READY_count, 486,             0
+ST_OP_MOV_READY_total_count, 486,             0
+
+ST_OP_CMOV_READY_count, 486,             0
+ST_OP_CMOV_READY_total_count, 486,             0
+
+ST_OP_LDA_READY_count, 486,             0
+ST_OP_LDA_READY_total_count, 486,             0
+
+ST_OP_ILD_READY_count, 486,             0
+ST_OP_ILD_READY_total_count, 486,             0
+
+ST_OP_IST_READY_count, 486,             0
+ST_OP_IST_READY_total_count, 486,             0
+
+ST_OP_IADD_READY_count, 486,             0
+ST_OP_IADD_READY_total_count, 486,             0
+
+ST_OP_IMUL_READY_count, 486,             0
+ST_OP_IMUL_READY_total_count, 486,             0
+
+ST_OP_IDIV_READY_count, 486,             0
+ST_OP_IDIV_READY_total_count, 486,             0
+
+ST_OP_ICMP_READY_count, 486,             0
+ST_OP_ICMP_READY_total_count, 486,             0
+
+ST_OP_LOGIC_READY_count, 486,             0
+ST_OP_LOGIC_READY_total_count, 486,             0
+
+ST_OP_SHIFT_READY_count, 486,             0
+ST_OP_SHIFT_READY_total_count, 486,             0
+
+ST_OP_FLD_READY_count, 486,             0
+ST_OP_FLD_READY_total_count, 486,             0
+
+ST_OP_FST_READY_count, 486,             0
+ST_OP_FST_READY_total_count, 486,             0
+
+ST_OP_FCVT_READY_count, 486,             0
+ST_OP_FCVT_READY_total_count, 486,             0
+
+ST_OP_FADD_READY_count, 486,             0
+ST_OP_FADD_READY_total_count, 486,             0
+
+ST_OP_FMUL_READY_count, 486,             0
+ST_OP_FMUL_READY_total_count, 486,             0
+
+ST_OP_FMA_READY_count, 486,             0
+ST_OP_FMA_READY_total_count, 486,             0
+
+ST_OP_FDIV_READY_count, 486,             0
+ST_OP_FDIV_READY_total_count, 486,             0
+
+ST_OP_FCMP_READY_count, 486,             0
+ST_OP_FCMP_READY_total_count, 486,             0
+
+ST_OP_FCMOV_READY_count, 486,             0
+ST_OP_FCMOV_READY_total_count, 486,             0
+
+ST_OP_GATHER_READY_count, 486,             0
+ST_OP_GATHER_READY_total_count, 486,             0
+
+ST_OP_SCATTER_READY_count, 486,             0
+ST_OP_SCATTER_READY_total_count, 486,             0
+
+ST_OP_PIPELINED_FAST_READY_count, 486,             0
+ST_OP_PIPELINED_FAST_READY_total_count, 486,             0
+
+ST_OP_PIPELINED_MEDIUM_READY_count, 486,             0
+ST_OP_PIPELINED_MEDIUM_READY_total_count, 486,             0
+
+ST_OP_PIPELINED_SLOW_READY_count, 486,             0
+ST_OP_PIPELINED_SLOW_READY_total_count, 486,             0
+
+ST_OP_NOTPIPELINED_MEDIUM_READY_count, 486,             0
+ST_OP_NOTPIPELINED_MEDIUM_READY_total_count, 486,             0
+
+ST_OP_NOTPIPELINED_SLOW_READY_count, 486,             0
+ST_OP_NOTPIPELINED_SLOW_READY_total_count, 486,             0
+
+ST_OP_NOTPIPELINED_VERY_SLOW_READY_count, 486,             0
+ST_OP_NOTPIPELINED_VERY_SLOW_READY_total_count, 486,             0
+
+ST_NOT_CF_READY_count, 487,             0
+ST_NOT_CF_READY_total_count, 487,             0
+
+ST_CF_BR_READY_count, 487,             0
+ST_CF_BR_READY_total_count, 487,             0
+
+ST_CF_CBR_READY_count, 487,             0
+ST_CF_CBR_READY_total_count, 487,             0
+
+ST_CF_REP_READY_count, 487,             0
+ST_CF_REP_READY_total_count, 487,             0
+
+ST_CF_CALL_READY_count, 487,             0
+ST_CF_CALL_READY_total_count, 487,             0
+
+ST_CF_IBR_READY_count, 487,             0
+ST_CF_IBR_READY_total_count, 487,             0
+
+ST_CF_ICALL_READY_count, 487,             0
+ST_CF_ICALL_READY_total_count, 487,             0
+
+ST_CF_ICO_READY_count, 487,             0
+ST_CF_ICO_READY_total_count, 487,             0
+
+ST_CF_RET_READY_count, 487,             0
+ST_CF_RET_READY_total_count, 487,             0
+
+ST_CF_SYS_READY_count, 487,             0
+ST_CF_SYS_READY_total_count, 487,             0
+
+ST_BAR_NONE_READY_count, 488,             0
+ST_BAR_NONE_READY_total_count, 488,             0
+
+ST_BAR_FETCH_READY_count, 488,             0
+ST_BAR_FETCH_READY_total_count, 488,             0
+
+ST_BAR_ISSUE_READY_count, 488,             0
+ST_BAR_ISSUE_READY_total_count, 488,             0
+
+ST_BAR_BOTH_READY_count, 488,             0
+ST_BAR_BOTH_READY_total_count, 488,             0
+
+ST_NOT_MEM_READY_count, 489,             0
+ST_NOT_MEM_READY_total_count, 489,             0
+
+ST_MEM_LD_READY_count, 489,             0
+ST_MEM_LD_READY_total_count, 489,             0
+
+ST_MEM_ST_READY_count, 489,             0
+ST_MEM_ST_READY_total_count, 489,             0
+
+ST_MEM_PF_READY_count, 489,             0
+ST_MEM_PF_READY_total_count, 489,             0
+
+ST_MEM_WH_READY_count, 489,             0
+ST_MEM_WH_READY_total_count, 489,             0
+
+ST_MEM_EVICT_READY_count, 489,             0
+ST_MEM_EVICT_READY_total_count, 489,             0
+
+ST_NOT_MEM_OFFPATH_READY_count, 490,             0
+ST_NOT_MEM_OFFPATH_READY_total_count, 490,             0
+
+ST_MEM_LD_OFFPATH_READY_count, 490,             0
+ST_MEM_LD_OFFPATH_READY_total_count, 490,             0
+
+ST_MEM_ST_OFFPATH_READY_count, 490,             0
+ST_MEM_ST_OFFPATH_READY_total_count, 490,             0
+
+ST_MEM_PF_OFFPATH_READY_count, 490,             0
+ST_MEM_PF_OFFPATH_READY_total_count, 490,             0
+
+ST_MEM_WH_OFFPATH_READY_count, 490,             0
+ST_MEM_WH_OFFPATH_READY_total_count, 490,             0
+
+ST_MEM_EVIC_OFFPATHT_READY_count, 490,             0
+ST_MEM_EVIC_OFFPATHT_READY_total_count, 490,             0
+
+ST_OP_ONPATH_READY_count, 0,             0
+ST_OP_ONPATH_READY_total_count, 0,             0
+
+ST_OP_OFFPATH_READY_count, 0,             0
+ST_OP_OFFPATH_READY_total_count, 0,             0
+
+ST_OP_INV_READY_UNISSUED_count, 491,             0
+ST_OP_INV_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_NOP_READY_UNISSUED_count, 491,             0
+ST_OP_NOP_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_CF_READY_UNISSUED_count, 491,             0
+ST_OP_CF_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_MOV_READY_UNISSUED_count, 491,             0
+ST_OP_MOV_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_CMOV_READY_UNISSUED_count, 491,             0
+ST_OP_CMOV_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_LDA_READY_UNISSUED_count, 491,             0
+ST_OP_LDA_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_ILD_READY_UNISSUED_count, 491,             0
+ST_OP_ILD_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_IST_READY_UNISSUED_count, 491,             0
+ST_OP_IST_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_IADD_READY_UNISSUED_count, 491,             0
+ST_OP_IADD_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_IMUL_READY_UNISSUED_count, 491,             0
+ST_OP_IMUL_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_IDIV_READY_UNISSUED_count, 491,             0
+ST_OP_IDIV_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_ICMP_READY_UNISSUED_count, 491,             0
+ST_OP_ICMP_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_LOGIC_READY_UNISSUED_count, 491,             0
+ST_OP_LOGIC_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_SHIFT_READY_UNISSUED_count, 491,             0
+ST_OP_SHIFT_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FLD_READY_UNISSUED_count, 491,             0
+ST_OP_FLD_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FST_READY_UNISSUED_count, 491,             0
+ST_OP_FST_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FCVT_READY_UNISSUED_count, 491,             0
+ST_OP_FCVT_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FADD_READY_UNISSUED_count, 491,             0
+ST_OP_FADD_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FMUL_READY_UNISSUED_count, 491,             0
+ST_OP_FMUL_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FMA_READY_UNISSUED_count, 491,             0
+ST_OP_FMA_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FDIV_READY_UNISSUED_count, 491,             0
+ST_OP_FDIV_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FCMP_READY_UNISSUED_count, 491,             0
+ST_OP_FCMP_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_FCMOV_READY_UNISSUED_count, 491,             0
+ST_OP_FCMOV_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_GATHER_READY_UNISSUED_count, 491,             0
+ST_OP_GATHER_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_SCATTER_READY_UNISSUED_count, 491,             0
+ST_OP_SCATTER_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_PIPELINED_FAST_READY_UNISSUED_count, 491,             0
+ST_OP_PIPELINED_FAST_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_PIPELINED_MEDIUM_READY_UNISSUED_count, 491,             0
+ST_OP_PIPELINED_MEDIUM_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_PIPELINED_SLOW_READY_UNISSUED_count, 491,             0
+ST_OP_PIPELINED_SLOW_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_NOTPIPELINED_MEDIUM_READY_UNISSUED_count, 491,             0
+ST_OP_NOTPIPELINED_MEDIUM_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_NOTPIPELINED_SLOW_READY_UNISSUED_count, 491,             0
+ST_OP_NOTPIPELINED_SLOW_READY_UNISSUED_total_count, 491,             0
+
+ST_OP_NOTPIPELINED_VERY_SLOW_READY_UNISSUED_count, 491,             0
+ST_OP_NOTPIPELINED_VERY_SLOW_READY_UNISSUED_total_count, 491,             0
+
+ST_NOT_CF_READY_UNISSUED_count, 492,             0
+ST_NOT_CF_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_BR_READY_UNISSUED_count, 492,             0
+ST_CF_BR_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_CBR_READY_UNISSUED_count, 492,             0
+ST_CF_CBR_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_REP_READY_UNISSUED_count, 492,             0
+ST_CF_REP_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_CALL_READY_UNISSUED_count, 492,             0
+ST_CF_CALL_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_IBR_READY_UNISSUED_count, 492,             0
+ST_CF_IBR_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_ICALL_READY_UNISSUED_count, 492,             0
+ST_CF_ICALL_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_ICO_READY_UNISSUED_count, 492,             0
+ST_CF_ICO_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_RET_READY_UNISSUED_count, 492,             0
+ST_CF_RET_READY_UNISSUED_total_count, 492,             0
+
+ST_CF_SYS_READY_UNISSUED_count, 492,             0
+ST_CF_SYS_READY_UNISSUED_total_count, 492,             0
+
+ST_BAR_NONE_READY_UNISSUED_count, 493,             0
+ST_BAR_NONE_READY_UNISSUED_total_count, 493,             0
+
+ST_BAR_FETCH_READY_UNISSUED_count, 493,             0
+ST_BAR_FETCH_READY_UNISSUED_total_count, 493,             0
+
+ST_BAR_ISSUE_READY_UNISSUED_count, 493,             0
+ST_BAR_ISSUE_READY_UNISSUED_total_count, 493,             0
+
+ST_BAR_BOTH_READY_UNISSUED_count, 493,             0
+ST_BAR_BOTH_READY_UNISSUED_total_count, 493,             0
+
+ST_NOT_MEM_READY_UNISSUED_count, 494,             0
+ST_NOT_MEM_READY_UNISSUED_total_count, 494,             0
+
+ST_MEM_LD_READY_UNISSUED_count, 494,             0
+ST_MEM_LD_READY_UNISSUED_total_count, 494,             0
+
+ST_MEM_ST_READY_UNISSUED_count, 494,             0
+ST_MEM_ST_READY_UNISSUED_total_count, 494,             0
+
+ST_MEM_PF_READY_UNISSUED_count, 494,             0
+ST_MEM_PF_READY_UNISSUED_total_count, 494,             0
+
+ST_MEM_WH_READY_UNISSUED_count, 494,             0
+ST_MEM_WH_READY_UNISSUED_total_count, 494,             0
+
+ST_MEM_EVICT_READY_UNISSUED_count, 494,             0
+ST_MEM_EVICT_READY_UNISSUED_total_count, 494,             0
+
+ST_NOT_MEM_OFFPATH_READY_UNISSUED_count, 495,             0
+ST_NOT_MEM_OFFPATH_READY_UNISSUED_total_count, 495,             0
+
+ST_MEM_LD_OFFPATH_READY_UNISSUED_count, 495,             0
+ST_MEM_LD_OFFPATH_READY_UNISSUED_total_count, 495,             0
+
+ST_MEM_ST_OFFPATH_READY_UNISSUED_count, 495,             0
+ST_MEM_ST_OFFPATH_READY_UNISSUED_total_count, 495,             0
+
+ST_MEM_PF_OFFPATH_READY_UNISSUED_count, 495,             0
+ST_MEM_PF_OFFPATH_READY_UNISSUED_total_count, 495,             0
+
+ST_MEM_WH_OFFPATH_READY_UNISSUED_count, 495,             0
+ST_MEM_WH_OFFPATH_READY_UNISSUED_total_count, 495,             0
+
+ST_MEM_EVIC_OFFPATHT_READY_UNISSUED_count, 495,             0
+ST_MEM_EVIC_OFFPATHT_READY_UNISSUED_total_count, 495,             0
+
+ST_OP_ONPATH_READY_UNISSUED_count, 0,             0
+ST_OP_ONPATH_READY_UNISSUED_total_count, 0,             0
+
+ST_OP_OFFPATH_READY_UNISSUED_count, 0,             0
+ST_OP_OFFPATH_READY_UNISSUED_total_count, 0,             0
+
+MAP_STAGE_STARVED_count, 496,          2570
+MAP_STAGE_STARVED_total_count, 496,         11430
+
+MAP_STAGE_NOT_STARVED_count, 496,       1949578
+MAP_STAGE_NOT_STARVED_total_count, 496,       5848979
+
+MAP_STAGE_STALLED_count, 497,             0
+MAP_STAGE_STALLED_total_count, 497,             0
+
+MAP_STAGE_NOT_STALLED_count, 497,       1952148
+MAP_STAGE_NOT_STALLED_total_count, 497,       5860409
+
+MAP_STAGE_OFF_PATH_count, 497,          6009
+MAP_STAGE_OFF_PATH_total_count, 497,         22381
+
+MAP_STAGE_STALL_ITSELF_count, 498,       1682503
+MAP_STAGE_STALL_ITSELF_total_count, 498,       5281031
+
+MAP_STAGE_NOT_STALL_ITSELF_count, 498,       1958157
+MAP_STAGE_NOT_STALL_ITSELF_total_count, 498,       5882790
+
+REG_FILE_CHECKED_GENERAL_PURPOSE_count, 0,       3640660
+REG_FILE_CHECKED_GENERAL_PURPOSE_total_count, 0,      11163821
+
+REG_FILE_CHECKED_VECTOR_count, 0,       1958157
+REG_FILE_CHECKED_VECTOR_total_count, 0,       5882790
+
+REG_FILE_NO_FREE_GENERAL_PURPOSE_count, 0,       1682503
+REG_FILE_NO_FREE_GENERAL_PURPOSE_total_count, 0,       5281031
+
+REG_FILE_NO_FREE_VECTOR_count, 0,             0
+REG_FILE_NO_FREE_VECTOR_total_count, 0,             0
+
+MAP_STAGE_LATE_ALLOCATE_SEND_BACK_count, 0,             0
+MAP_STAGE_LATE_ALLOCATE_SEND_BACK_total_count, 0,             0
+
+MAP_STAGE_RENAME_OP_ONPATH_count, 0,      11694263
+MAP_STAGE_RENAME_OP_ONPATH_total_count, 0,      35083440
+
+MAP_STAGE_RENAME_OP_OFFPATH_count, 0,         32252
+MAP_STAGE_RENAME_OP_OFFPATH_total_count, 0,        108570
+
+MAP_STAGE_RENAME_INT_REG_ONPATH_count, 0,       9979876
+MAP_STAGE_RENAME_INT_REG_ONPATH_total_count, 0,      29933407
+
+MAP_STAGE_RENAME_INT_REG_OFFPATH_count, 0,         23573
+MAP_STAGE_RENAME_INT_REG_OFFPATH_total_count, 0,         78152
+
+MAP_STAGE_RENAME_VEC_REG_ONPATH_count, 0,        210858
+MAP_STAGE_RENAME_VEC_REG_ONPATH_total_count, 0,        634558
+
+MAP_STAGE_RENAME_VEC_REG_OFFPATH_count, 0,           946
+MAP_STAGE_RENAME_VEC_REG_OFFPATH_total_count, 0,          3000
+
+MAP_STAGE_RENAME_MOVE_ELIM_ONPATH_count, 0,             0
+MAP_STAGE_RENAME_MOVE_ELIM_ONPATH_total_count, 0,             0
+
+MAP_STAGE_RENAME_MOVE_ELIM_OFFPATH_count, 0,             0
+MAP_STAGE_RENAME_MOVE_ELIM_OFFPATH_total_count, 0,             0
+
+MAP_STAGE_ONPATH_INT_REG_NUM_ALLOC_count, 0,       9980100
+MAP_STAGE_ONPATH_INT_REG_NUM_ALLOC_total_count, 0,      29933388
+
+MAP_STAGE_ONPATH_VEC_REG_NUM_ALLOC_count, 0,        210860
+MAP_STAGE_ONPATH_VEC_REG_NUM_ALLOC_total_count, 0,        634555
+
+MAP_STAGE_ONPATH_INT_REG_NUM_SHORTLIVE_count, 0,       3737323
+MAP_STAGE_ONPATH_INT_REG_NUM_SHORTLIVE_total_count, 0,      11230942
+
+MAP_STAGE_ONPATH_VEC_REG_NUM_SHORTLIVE_count, 0,         55000
+MAP_STAGE_ONPATH_VEC_REG_NUM_SHORTLIVE_total_count, 0,        166750
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_0_count, 0,       2134699
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_0_total_count, 0,       6400616
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_0_count, 0,         75640
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_0_total_count, 0,        226857
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_1_count, 0,       5023350
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_1_total_count, 0,      15068535
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_1_count, 0,        120097
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_1_total_count, 0,        362346
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_2_count, 0,       1997054
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_2_total_count, 0,       5989787
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_2_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_2_total_count, 0,             0
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_3_count, 0,        279685
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_3_total_count, 0,        839318
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_3_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_3_total_count, 0,             0
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_4_count, 0,        212094
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_4_total_count, 0,        635960
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_4_count, 0,         15123
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_4_total_count, 0,         45352
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_5_count, 0,         76094
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_5_total_count, 0,        227464
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_5_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_5_total_count, 0,             0
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_6_count, 0,        121004
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_6_total_count, 0,        362782
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_6_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_6_total_count, 0,             0
+
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_7_PLUS_count, 0,        136120
+MAP_STAGE_ONPATH_INT_REG_USE_COUNT_7_PLUS_total_count, 0,        408926
+
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_7_PLUS_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_USE_COUNT_7_PLUS_total_count, 0,             0
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_0_count, 0,             0
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_0_pct, 0,        0.000
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_0_total_count, 0,             0
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_0_total_pct, 0,        0.000
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_0_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_0_pct, 0,        0.000
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_0_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_0_total_pct, 0,        0.000
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_1_count, 0,             0
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_1_pct, 0,        0.000
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_1_total_count, 0,             0
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_1_total_pct, 0,        0.000
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_1_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_1_pct, 0,        0.000
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_1_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_1_total_pct, 0,        0.000
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_2_count, 0,       8592827
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_2_pct, 0,        4.303
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_2_total_count, 0,      25953602
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_2_total_pct, 0,        4.333
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_2_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_2_pct, 0,         -nan
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_2_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_2_total_pct, 0,         -nan
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_3_count, 0,       2736023
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_3_pct, 0,        9.783
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_3_total_count, 0,       8241279
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_3_total_pct, 0,        9.819
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_3_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_3_pct, 0,         -nan
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_3_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_3_total_pct, 0,         -nan
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_4_count, 0,       3277387
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_4_pct, 0,       15.453
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_4_total_count, 0,       9980812
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_4_total_pct, 0,       15.694
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_4_count, 0,         29479
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_4_pct, 0,        1.949
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_4_total_count, 0,         90496
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_4_total_pct, 0,        1.995
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_5_count, 0,       1714291
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_5_pct, 0,       22.529
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_5_total_count, 0,       5313792
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_5_total_pct, 0,       23.361
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_5_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_5_pct, 0,         -nan
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_5_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_5_total_pct, 0,         -nan
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_6_count, 0,       3874350
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_6_pct, 0,       32.018
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_6_total_count, 0,      11738918
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_6_total_pct, 0,       32.358
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_6_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_6_pct, 0,         -nan
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_6_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_6_total_pct, 0,         -nan
+
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_7_PLUS_count, 0,       8043998
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_7_PLUS_pct, 0,       59.095
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_7_PLUS_total_count, 0,      25222053
+MAP_STAGE_ONPATH_INT_REG_CONSUME_DIST_7_PLUS_total_pct, 0,       61.679
+
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_7_PLUS_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_7_PLUS_pct, 0,         -nan
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_7_PLUS_total_count, 0,             0
+MAP_STAGE_ONPATH_VEC_REG_CONSUME_DIST_7_PLUS_total_pct, 0,         -nan
+
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_count, 0,      13612878
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_pct, 0,        4.820
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_total_count, 0,      40843057
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_total_pct, 0,        4.800
+
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_count, 0,        180599
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_pct, 0,        0.064
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_total_count, 0,        543810
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_total_pct, 0,        0.064
+
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_count, 0,       5764837
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_pct, 0,        2.041
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_total_count, 0,      17300380
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_total_pct, 0,        2.033
+
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_count, 0,         45369
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_pct, 0,        0.016
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_total_count, 0,        136067
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_total_pct, 0,        0.016
+
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_count, 0,       2314374
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_pct, 0,        0.820
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_total_count, 0,       6944099
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_total_pct, 0,        0.816
+
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_count, 0,         19797
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_pct, 0,        0.007
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_total_count, 0,         58746
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_total_pct, 0,        0.007
+
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_count, 0,      13607809
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_pct, 0,        4.826
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_total_count, 0,      40824636
+MAP_STAGE_INT_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_total_pct, 0,        4.806
+
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_count, 0,        180588
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_pct, 0,        0.064
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_total_count, 0,        543756
+MAP_STAGE_VEC_REG_ISSUE_READ_TOTAL_CONSUMED_ONPATH_total_pct, 0,        0.064
+
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_count, 0,       5762497
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_pct, 0,        2.044
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_total_count, 0,      17291848
+MAP_STAGE_INT_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_total_pct, 0,        2.036
+
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_count, 0,         45369
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_pct, 0,        0.016
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_total_count, 0,        136056
+MAP_STAGE_VEC_REG_ISSUE_READ_MULTI_CONSUMED_ONPATH_total_pct, 0,        0.016
+
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_count, 0,       2313391
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_pct, 0,        0.820
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_total_count, 0,       6940657
+MAP_STAGE_INT_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_total_pct, 0,        0.817
+
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_count, 0,         19797
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_pct, 0,        0.007
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_total_count, 0,         58743
+MAP_STAGE_VEC_REG_ISSUE_READ_SAME_CYCLE_CONSUMED_ONPATH_total_pct, 0,        0.007
+
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_EMPTY_count, 0,     539017396
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_EMPTY_total_count, 0,    1630936130
+
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_EMPTY_count, 0,      13732132
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_EMPTY_total_count, 0,      41678630
+
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_IN_USE_count, 0,     668546410
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_IN_USE_total_count, 0,    2030246279
+
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_IN_USE_count, 0,      21518258
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_IN_USE_total_count, 0,      65569258
+
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_SPEC_RELEASE_count, 0,     899844654
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_SPEC_RELEASE_total_count, 0,    2756983636
+
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_SPEC_RELEASE_count, 0,      31864452
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_SPEC_RELEASE_total_count, 0,      97159094
+
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_NONSPEC_RELEASE_count, 0,     899844654
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_NONSPEC_RELEASE_total_count, 0,    2756983636
+
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_NONSPEC_RELEASE_count, 0,      31864452
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_NONSPEC_RELEASE_total_count, 0,      97159094
+
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_TOTAL_count, 0,     899844654
+MAP_STAGE_ONPATH_INT_REG_LIFECYCLE_TOTAL_total_count, 0,    2756983636
+
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_TOTAL_count, 0,      31864452
+MAP_STAGE_ONPATH_VEC_REG_LIFECYCLE_TOTAL_total_count, 0,      97159094
+
+MAP_STAGE_ONPATH_INT_REG_NUM_NONBRANCH_count, 0,       9980100
+MAP_STAGE_ONPATH_INT_REG_NUM_NONBRANCH_total_count, 0,      29933388
+
+MAP_STAGE_ONPATH_VEC_REG_NUM_NONBRANCH_count, 0,        210860
+MAP_STAGE_ONPATH_VEC_REG_NUM_NONBRANCH_total_count, 0,        634555
+
+MAP_STAGE_ONPATH_INT_REG_NUM_NONEXCEPT_count, 0,       9980100
+MAP_STAGE_ONPATH_INT_REG_NUM_NONEXCEPT_total_count, 0,      29933388
+
+MAP_STAGE_ONPATH_VEC_REG_NUM_NONEXCEPT_count, 0,        210860
+MAP_STAGE_ONPATH_VEC_REG_NUM_NONEXCEPT_total_count, 0,        634555
+
+MAP_STAGE_ONPATH_INT_REG_NUM_ATOMIC_count, 0,       9980100
+MAP_STAGE_ONPATH_INT_REG_NUM_ATOMIC_total_count, 0,      29933388
+
+MAP_STAGE_ONPATH_VEC_REG_NUM_ATOMIC_count, 0,        210860
+MAP_STAGE_ONPATH_VEC_REG_NUM_ATOMIC_total_count, 0,        634555
+
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_REDEFINED_DIST_TOTAL_count, 0,     899844654
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_REDEFINED_DIST_TOTAL_pct, 0,       90.164
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_REDEFINED_DIST_TOTAL_total_count, 0,    2756983636
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_REDEFINED_DIST_TOTAL_total_pct, 0,       92.104
+
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_REDEFINED_DIST_TOTAL_count, 0,      31864452
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_REDEFINED_DIST_TOTAL_pct, 0,      151.117
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_REDEFINED_DIST_TOTAL_total_count, 0,      97159094
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_REDEFINED_DIST_TOTAL_total_pct, 0,      153.114
+
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_CONSUMED_DIST_TOTAL_count, 0,     668546410
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_CONSUMED_DIST_TOTAL_pct, 0,       66.988
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_CONSUMED_DIST_TOTAL_total_count, 0,    2030246279
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_CONSUMED_DIST_TOTAL_total_pct, 0,       67.825
+
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_CONSUMED_DIST_TOTAL_count, 0,      21518258
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_CONSUMED_DIST_TOTAL_pct, 0,      102.050
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_CONSUMED_DIST_TOTAL_total_count, 0,      65569258
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_CONSUMED_DIST_TOTAL_total_pct, 0,      103.331
+
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_RELEASE_DIST_TOTAL_count, 0,     899844654
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_RELEASE_DIST_TOTAL_pct, 0,       90.164
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_RELEASE_DIST_TOTAL_total_count, 0,    2756983636
+MAP_STAGE_ONPATH_INT_REG_ATOMIC_RELEASE_DIST_TOTAL_total_pct, 0,       92.104
+
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_RELEASE_DIST_TOTAL_count, 0,      31864452
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_RELEASE_DIST_TOTAL_pct, 0,      151.117
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_RELEASE_DIST_TOTAL_total_count, 0,      97159094
+MAP_STAGE_ONPATH_VEC_REG_ATOMIC_RELEASE_DIST_TOTAL_total_pct, 0,      153.114
+
+EXEC_STAGE_STARVED_count, 499,       2998700
+EXEC_STAGE_STARVED_total_count, 499,       9238354
+
+EXEC_STAGE_NOT_STARVED_count, 499,        636346
+EXEC_STAGE_NOT_STARVED_total_count, 499,       1904783
+
+EXEC_STAGE_OFF_PATH_count, 499,          5614
+EXEC_STAGE_OFF_PATH_total_count, 499,         20684
+
+FU_BUSY_0_count, 0,       1733169
+FU_BUSY_0_total_count, 0,       5202198
+
+FU_BUSY_1_count, 0,       2264522
+FU_BUSY_1_total_count, 0,       6793503
+
+FU_BUSY_2_count, 0,        709990
+FU_BUSY_2_total_count, 0,       2131821
+
+FU_BUSY_3_count, 0,        646613
+FU_BUSY_3_total_count, 0,       1938090
+
+FU_BUSY_4_count, 0,       1678106
+FU_BUSY_4_total_count, 0,       5042659
+
+FU_BUSY_5_count, 0,       1674305
+FU_BUSY_5_total_count, 0,       5018352
+
+FU_BUSY_6_count, 0,        708600
+FU_BUSY_6_total_count, 0,       2127284
+
+FU_BUSY_7_count, 0,        662498
+FU_BUSY_7_total_count, 0,       1981104
+
+FU_BUSY_8_count, 0,       1657214
+FU_BUSY_8_total_count, 0,       4970214
+
+FU_BUSY_9_count, 0,        612583
+FU_BUSY_9_total_count, 0,       1838151
+
+FU_BUSY_10_count, 0,             0
+FU_BUSY_10_total_count, 0,             0
+
+FU_BUSY_11_count, 0,             0
+FU_BUSY_11_total_count, 0,             0
+
+FU_BUSY_12_count, 0,             0
+FU_BUSY_12_total_count, 0,             0
+
+FU_BUSY_13_count, 0,             0
+FU_BUSY_13_total_count, 0,             0
+
+FU_BUSY_14_count, 0,             0
+FU_BUSY_14_total_count, 0,             0
+
+FU_BUSY_15_count, 0,             0
+FU_BUSY_15_total_count, 0,             0
+
+FU_BUSY_16_count, 0,             0
+FU_BUSY_16_total_count, 0,             0
+
+FU_BUSY_17_count, 0,             0
+FU_BUSY_17_total_count, 0,             0
+
+FU_BUSY_18_count, 0,             0
+FU_BUSY_18_total_count, 0,             0
+
+FU_BUSY_19_count, 0,             0
+FU_BUSY_19_total_count, 0,             0
+
+FU_BUSY_20_count, 0,             0
+FU_BUSY_20_total_count, 0,             0
+
+FU_BUSY_21_count, 0,             0
+FU_BUSY_21_total_count, 0,             0
+
+FU_BUSY_22_count, 0,             0
+FU_BUSY_22_total_count, 0,             0
+
+FU_BUSY_23_count, 0,             0
+FU_BUSY_23_total_count, 0,             0
+
+FU_BUSY_24_count, 0,             0
+FU_BUSY_24_total_count, 0,             0
+
+FU_BUSY_25_count, 0,             0
+FU_BUSY_25_total_count, 0,             0
+
+FU_BUSY_26_count, 0,             0
+FU_BUSY_26_total_count, 0,             0
+
+FU_BUSY_27_count, 0,             0
+FU_BUSY_27_total_count, 0,             0
+
+FU_BUSY_28_count, 0,             0
+FU_BUSY_28_total_count, 0,             0
+
+FU_BUSY_29_count, 0,             0
+FU_BUSY_29_total_count, 0,             0
+
+FU_BUSY_30_count, 0,             0
+FU_BUSY_30_total_count, 0,             0
+
+FU_BUSY_31_count, 0,             0
+FU_BUSY_31_total_count, 0,             0
+
+FU_REJECTED_OP_INV_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_INV_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOP_NOT_SIMD_count, 500,            52
+FU_REJECTED_OP_NOP_NOT_SIMD_total_count, 500,           155
+
+FU_REJECTED_OP_CF_NOT_SIMD_count, 500,            15
+FU_REJECTED_OP_CF_NOT_SIMD_total_count, 500,            29
+
+FU_REJECTED_OP_MOV_NOT_SIMD_count, 500,         51326
+FU_REJECTED_OP_MOV_NOT_SIMD_total_count, 500,        152253
+
+FU_REJECTED_OP_CMOV_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_CMOV_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_LDA_NOT_SIMD_count, 500,         14779
+FU_REJECTED_OP_LDA_NOT_SIMD_total_count, 500,         46761
+
+FU_REJECTED_OP_IMEM_NOT_SIMD_count, 500,         21242
+FU_REJECTED_OP_IMEM_NOT_SIMD_total_count, 500,         63468
+
+FU_REJECTED_OP_IADD_NOT_SIMD_count, 500,         12161
+FU_REJECTED_OP_IADD_NOT_SIMD_total_count, 500,         34074
+
+FU_REJECTED_OP_IMUL_NOT_SIMD_count, 500,        186695
+FU_REJECTED_OP_IMUL_NOT_SIMD_total_count, 500,        569254
+
+FU_REJECTED_OP_IDIV_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_IDIV_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_ICMP_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_ICMP_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_LOGIC_NOT_SIMD_count, 500,         88904
+FU_REJECTED_OP_LOGIC_NOT_SIMD_total_count, 500,        265717
+
+FU_REJECTED_OP_SHIFT_NOT_SIMD_count, 500,        227813
+FU_REJECTED_OP_SHIFT_NOT_SIMD_total_count, 500,        672684
+
+FU_REJECTED_OP_FMEM_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FMEM_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FCVT_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FCVT_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FADD_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FADD_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FMUL_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FMUL_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FMA_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FMA_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FDIV_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FDIV_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FCMP_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FCMP_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FCMOV_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_FCMOV_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_GATHER_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_GATHER_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_SCATTER_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_SCATTER_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_PIPELINED_FAST_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_PIPELINED_FAST_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_PIPELINED_MEDIUM_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_PIPELINED_MEDIUM_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_PIPELINED_SLOW_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_PIPELINED_SLOW_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOTPIPELINED_MEDIUM_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_NOTPIPELINED_MEDIUM_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOTPIPELINED_SLOW_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_NOTPIPELINED_SLOW_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOTPIPELINED_VERY_SLOW_NOT_SIMD_count, 500,             0
+FU_REJECTED_OP_NOTPIPELINED_VERY_SLOW_NOT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_INV_SIMD_count, 500,             0
+FU_REJECTED_OP_INV_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOP_SIMD_count, 500,             0
+FU_REJECTED_OP_NOP_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_CF_SIMD_count, 500,             0
+FU_REJECTED_OP_CF_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_MOV_SIMD_count, 500,             0
+FU_REJECTED_OP_MOV_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_CMOV_SIMD_count, 500,             0
+FU_REJECTED_OP_CMOV_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_LDA_SIMD_count, 500,             0
+FU_REJECTED_OP_LDA_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_IMEM_SIMD_count, 500,             0
+FU_REJECTED_OP_IMEM_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_IADD_SIMD_count, 500,             0
+FU_REJECTED_OP_IADD_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_IMUL_SIMD_count, 500,             0
+FU_REJECTED_OP_IMUL_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_IDIV_SIMD_count, 500,             0
+FU_REJECTED_OP_IDIV_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_ICMP_SIMD_count, 500,             0
+FU_REJECTED_OP_ICMP_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_LOGIC_SIMD_count, 500,             0
+FU_REJECTED_OP_LOGIC_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_SHIFT_SIMD_count, 500,             0
+FU_REJECTED_OP_SHIFT_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FMEM_SIMD_count, 500,             0
+FU_REJECTED_OP_FMEM_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FCVT_SIMD_count, 500,           396
+FU_REJECTED_OP_FCVT_SIMD_total_count, 500,          1297
+
+FU_REJECTED_OP_FADD_SIMD_count, 500,           525
+FU_REJECTED_OP_FADD_SIMD_total_count, 500,          1546
+
+FU_REJECTED_OP_FMUL_SIMD_count, 500,             0
+FU_REJECTED_OP_FMUL_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FMA_SIMD_count, 500,             0
+FU_REJECTED_OP_FMA_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FDIV_SIMD_count, 500,             0
+FU_REJECTED_OP_FDIV_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FCMP_SIMD_count, 500,             0
+FU_REJECTED_OP_FCMP_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_FCMOV_SIMD_count, 500,             0
+FU_REJECTED_OP_FCMOV_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_GATHER_SIMD_count, 500,             0
+FU_REJECTED_OP_GATHER_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_SCATTER_SIMD_count, 500,             0
+FU_REJECTED_OP_SCATTER_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_PIPELINED_FAST_SIMD_count, 500,             0
+FU_REJECTED_OP_PIPELINED_FAST_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_PIPELINED_MEDIUM_SIMD_count, 500,             0
+FU_REJECTED_OP_PIPELINED_MEDIUM_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_PIPELINED_SLOW_SIMD_count, 500,             0
+FU_REJECTED_OP_PIPELINED_SLOW_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOTPIPELINED_MEDIUM_SIMD_count, 500,             0
+FU_REJECTED_OP_NOTPIPELINED_MEDIUM_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOTPIPELINED_SLOW_SIMD_count, 500,             0
+FU_REJECTED_OP_NOTPIPELINED_SLOW_SIMD_total_count, 500,             0
+
+FU_REJECTED_OP_NOTPIPELINED_VERY_SLOW_SIMD_count, 500,             0
+FU_REJECTED_OP_NOTPIPELINED_VERY_SLOW_SIMD_total_count, 500,             0
+
+LSQ_FULL_TOTAL_count, 0,             0
+LSQ_FULL_TOTAL_total_count, 0,             0
+
+LSQ_FULL_LOAD_QUEUE_count, 0,             0
+LSQ_FULL_LOAD_QUEUE_total_count, 0,             0
+
+LSQ_FULL_STORE_QUEUE_count, 0,             0
+LSQ_FULL_STORE_QUEUE_total_count, 0,             0
+
+OP_WAIT_0_count, 0,       7734307
+OP_WAIT_0_total_count, 0,      23218088
+
+OP_WAIT_1_count, 0,       1563684
+OP_WAIT_1_total_count, 0,       4731903
+
+OP_WAIT_2_count, 0,        570353
+OP_WAIT_2_total_count, 0,       1719582
+
+OP_WAIT_3_count, 0,        306322
+OP_WAIT_3_total_count, 0,        916254
+
+OP_WAIT_4_count, 0,        206232
+OP_WAIT_4_total_count, 0,        612575
+
+OP_WAIT_5_count, 0,        145998
+OP_WAIT_5_total_count, 0,        432711
+
+OP_WAIT_6_count, 0,        106859
+OP_WAIT_6_total_count, 0,        311560
+
+OP_WAIT_7_count, 0,         75680
+OP_WAIT_7_total_count, 0,        220672
+
+OP_WAIT_8_count, 0,         61017
+OP_WAIT_8_total_count, 0,        174766
+
+OP_WAIT_9_count, 0,         45388
+OP_WAIT_9_total_count, 0,        129755
+
+OP_WAIT_10_count, 0,         35718
+OP_WAIT_10_total_count, 0,        102386
+
+OP_WAIT_11_count, 0,         35823
+OP_WAIT_11_total_count, 0,        102247
+
+OP_WAIT_12_count, 0,         40214
+OP_WAIT_12_total_count, 0,        119072
+
+OP_WAIT_13_count, 0,         48182
+OP_WAIT_13_total_count, 0,        143401
+
+OP_WAIT_14_count, 0,         40778
+OP_WAIT_14_total_count, 0,        120517
+
+OP_WAIT_15_count, 0,         43288
+OP_WAIT_15_total_count, 0,        130251
+
+OP_WAIT_16_count, 0,         37563
+OP_WAIT_16_total_count, 0,        113321
+
+OP_WAIT_17_count, 0,         34937
+OP_WAIT_17_total_count, 0,        105096
+
+OP_WAIT_18_count, 0,         32617
+OP_WAIT_18_total_count, 0,         97481
+
+OP_WAIT_19_count, 0,         32859
+OP_WAIT_19_total_count, 0,         99789
+
+OP_WAIT_20_count, 0,         32135
+OP_WAIT_20_total_count, 0,         96709
+
+OP_WAIT_21_count, 0,         31154
+OP_WAIT_21_total_count, 0,         93472
+
+OP_WAIT_22_count, 0,         28320
+OP_WAIT_22_total_count, 0,         86245
+
+OP_WAIT_23_count, 0,         26485
+OP_WAIT_23_total_count, 0,         81168
+
+OP_WAIT_24_count, 0,         24652
+OP_WAIT_24_total_count, 0,         74957
+
+OP_WAIT_25_count, 0,         23204
+OP_WAIT_25_total_count, 0,         70910
+
+OP_WAIT_26_count, 0,         24431
+OP_WAIT_26_total_count, 0,         71982
+
+OP_WAIT_27_count, 0,         23375
+OP_WAIT_27_total_count, 0,         70736
+
+OP_WAIT_28_count, 0,         22765
+OP_WAIT_28_total_count, 0,         67644
+
+OP_WAIT_29_count, 0,         21575
+OP_WAIT_29_total_count, 0,         63662
+
+OP_WAIT_30_count, 0,         19898
+OP_WAIT_30_total_count, 0,         59408
+
+OP_WAIT_31_count, 0,        218699
+OP_WAIT_31_total_count, 0,        645120
+
+ROW_SIZE_0_count, 0,       1584838
+ROW_SIZE_0_total_count, 0,       5010774
+
+ROW_SIZE_1_count, 0,        354367
+ROW_SIZE_1_total_count, 0,       1057287
+
+ROW_SIZE_2_count, 0,        196159
+ROW_SIZE_2_total_count, 0,        575400
+
+ROW_SIZE_3_count, 0,         78622
+ROW_SIZE_3_total_count, 0,        233337
+
+ROW_SIZE_4_count, 0,         83060
+ROW_SIZE_4_total_count, 0,        247702
+
+ROW_SIZE_5_count, 0,         37267
+ROW_SIZE_5_total_count, 0,        112128
+
+ROW_SIZE_6_count, 0,         81409
+ROW_SIZE_6_total_count, 0,        241673
+
+ROW_SIZE_7_count, 0,         89404
+ROW_SIZE_7_total_count, 0,        268256
+
+ROW_SIZE_8_count, 0,       1134888
+ROW_SIZE_8_total_count, 0,       3412008
+
+ROW_SIZE_9_count, 0,             0
+ROW_SIZE_9_total_count, 0,             0
+
+ROW_SIZE_10_count, 0,             0
+ROW_SIZE_10_total_count, 0,             0
+
+ROW_SIZE_11_count, 0,             0
+ROW_SIZE_11_total_count, 0,             0
+
+ROW_SIZE_12_count, 0,             0
+ROW_SIZE_12_total_count, 0,             0
+
+ROW_SIZE_13_count, 0,             0
+ROW_SIZE_13_total_count, 0,             0
+
+ROW_SIZE_14_count, 0,             0
+ROW_SIZE_14_total_count, 0,             0
+
+ROW_SIZE_15_count, 0,             0
+ROW_SIZE_15_total_count, 0,             0
+
+ROW_SIZE_16_count, 0,             0
+ROW_SIZE_16_total_count, 0,             0
+
+ROW_SIZE_17_count, 0,             0
+ROW_SIZE_17_total_count, 0,             0
+
+ROW_SIZE_18_count, 0,             0
+ROW_SIZE_18_total_count, 0,             0
+
+ROW_SIZE_19_count, 0,             0
+ROW_SIZE_19_total_count, 0,             0
+
+ROW_SIZE_20_count, 0,             0
+ROW_SIZE_20_total_count, 0,             0
+
+ROW_SIZE_21_count, 0,             0
+ROW_SIZE_21_total_count, 0,             0
+
+ROW_SIZE_22_count, 0,             0
+ROW_SIZE_22_total_count, 0,             0
+
+ROW_SIZE_23_count, 0,             0
+ROW_SIZE_23_total_count, 0,             0
+
+ROW_SIZE_24_count, 0,             0
+ROW_SIZE_24_total_count, 0,             0
+
+ROW_SIZE_25_count, 0,             0
+ROW_SIZE_25_total_count, 0,             0
+
+ROW_SIZE_26_count, 0,             0
+ROW_SIZE_26_total_count, 0,             0
+
+ROW_SIZE_27_count, 0,             0
+ROW_SIZE_27_total_count, 0,             0
+
+ROW_SIZE_28_count, 0,             0
+ROW_SIZE_28_total_count, 0,             0
+
+ROW_SIZE_29_count, 0,             0
+ROW_SIZE_29_total_count, 0,             0
+
+ROW_SIZE_30_count, 0,             0
+ROW_SIZE_30_total_count, 0,             0
+
+ROW_SIZE_31_count, 0,             0
+ROW_SIZE_31_total_count, 0,             0
+
+RET_OP_EXEC_COUNT_0_count, 501,             0
+RET_OP_EXEC_COUNT_0_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_1_count, 501,      11694512
+RET_OP_EXEC_COUNT_1_total_count, 501,      35083440
+
+RET_OP_EXEC_COUNT_2_count, 501,             0
+RET_OP_EXEC_COUNT_2_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_3_count, 501,             0
+RET_OP_EXEC_COUNT_3_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_4_count, 501,             0
+RET_OP_EXEC_COUNT_4_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_5_count, 501,             0
+RET_OP_EXEC_COUNT_5_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_6_count, 501,             0
+RET_OP_EXEC_COUNT_6_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_7_count, 501,             0
+RET_OP_EXEC_COUNT_7_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_8_count, 501,             0
+RET_OP_EXEC_COUNT_8_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_9_count, 501,             0
+RET_OP_EXEC_COUNT_9_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_10_count, 501,             0
+RET_OP_EXEC_COUNT_10_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_11_count, 501,             0
+RET_OP_EXEC_COUNT_11_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_12_count, 501,             0
+RET_OP_EXEC_COUNT_12_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_13_count, 501,             0
+RET_OP_EXEC_COUNT_13_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_14_count, 501,             0
+RET_OP_EXEC_COUNT_14_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_15_count, 501,             0
+RET_OP_EXEC_COUNT_15_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_16_count, 501,             0
+RET_OP_EXEC_COUNT_16_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_17_count, 501,             0
+RET_OP_EXEC_COUNT_17_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_18_count, 501,             0
+RET_OP_EXEC_COUNT_18_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_19_count, 501,             0
+RET_OP_EXEC_COUNT_19_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_20_count, 501,             0
+RET_OP_EXEC_COUNT_20_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_21_count, 501,             0
+RET_OP_EXEC_COUNT_21_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_22_count, 501,             0
+RET_OP_EXEC_COUNT_22_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_23_count, 501,             0
+RET_OP_EXEC_COUNT_23_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_24_count, 501,             0
+RET_OP_EXEC_COUNT_24_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_25_count, 501,             0
+RET_OP_EXEC_COUNT_25_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_26_count, 501,             0
+RET_OP_EXEC_COUNT_26_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_27_count, 501,             0
+RET_OP_EXEC_COUNT_27_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_28_count, 501,             0
+RET_OP_EXEC_COUNT_28_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_29_count, 501,             0
+RET_OP_EXEC_COUNT_29_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_30_count, 501,             0
+RET_OP_EXEC_COUNT_30_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_31_count, 501,             0
+RET_OP_EXEC_COUNT_31_total_count, 501,             0
+
+RET_OP_EXEC_COUNT_32_count, 501,             0
+RET_OP_EXEC_COUNT_32_total_count, 501,             0
+
+RET_STALL_LENGTH_0_count, 502,      11693928
+RET_STALL_LENGTH_0_total_count, 502,      35081278
+
+RET_STALL_LENGTH_100_count, 502,           288
+RET_STALL_LENGTH_100_total_count, 502,          1344
+
+RET_STALL_LENGTH_200_count, 502,            83
+RET_STALL_LENGTH_200_total_count, 502,           242
+
+RET_STALL_LENGTH_300_count, 502,            68
+RET_STALL_LENGTH_300_total_count, 502,           147
+
+RET_STALL_LENGTH_400_count, 502,            47
+RET_STALL_LENGTH_400_total_count, 502,           113
+
+RET_STALL_LENGTH_500_count, 502,            30
+RET_STALL_LENGTH_500_total_count, 502,            61
+
+RET_STALL_LENGTH_600_count, 502,             4
+RET_STALL_LENGTH_600_total_count, 502,            13
+
+RET_STALL_LENGTH_700_count, 502,             7
+RET_STALL_LENGTH_700_total_count, 502,            14
+
+RET_STALL_LENGTH_800_count, 502,             5
+RET_STALL_LENGTH_800_total_count, 502,            15
+
+RET_STALL_LENGTH_900_count, 502,             4
+RET_STALL_LENGTH_900_total_count, 502,            20
+
+RET_STALL_LENGTH_1000_count, 502,             5
+RET_STALL_LENGTH_1000_total_count, 502,            34
+
+RET_STALL_LENGTH_1100_count, 502,            18
+RET_STALL_LENGTH_1100_total_count, 502,            73
+
+RET_STALL_LENGTH_1200_count, 502,            18
+RET_STALL_LENGTH_1200_total_count, 502,            69
+
+RET_STALL_LENGTH_1300_count, 502,             2
+RET_STALL_LENGTH_1300_total_count, 502,             8
+
+RET_STALL_LENGTH_1400_count, 502,             2
+RET_STALL_LENGTH_1400_total_count, 502,             4
+
+RET_STALL_LENGTH_1500_count, 502,             1
+RET_STALL_LENGTH_1500_total_count, 502,             1
+
+RET_STALL_LENGTH_1600_count, 502,             2
+RET_STALL_LENGTH_1600_total_count, 502,             3
+
+RET_STALL_LENGTH_1700_count, 502,             0
+RET_STALL_LENGTH_1700_total_count, 502,             1
+
+RET_STALL_LENGTH_1800_count, 502,             0
+RET_STALL_LENGTH_1800_total_count, 502,             0
+
+RET_STALL_LENGTH_1900_count, 502,             0
+RET_STALL_LENGTH_1900_total_count, 502,             0
+
+RET_STALL_LENGTH_2000_count, 502,             0
+RET_STALL_LENGTH_2000_total_count, 502,             0
+
+RET_STALL_LENGTH_2100_count, 502,             0
+RET_STALL_LENGTH_2100_total_count, 502,             0
+
+RET_STALL_LENGTH_2200_count, 502,             0
+RET_STALL_LENGTH_2200_total_count, 502,             0
+
+RET_STALL_LENGTH_2300_count, 502,             0
+RET_STALL_LENGTH_2300_total_count, 502,             0
+
+RET_STALL_LENGTH_2400_count, 502,             0
+RET_STALL_LENGTH_2400_total_count, 502,             0
+
+RET_STALL_LENGTH_2500_count, 502,             0
+RET_STALL_LENGTH_2500_total_count, 502,             0
+
+RET_STALL_LENGTH_2600_count, 502,             0
+RET_STALL_LENGTH_2600_total_count, 502,             0
+
+RET_STALL_LENGTH_2700_count, 502,             0
+RET_STALL_LENGTH_2700_total_count, 502,             0
+
+RET_STALL_LENGTH_2800_count, 502,             0
+RET_STALL_LENGTH_2800_total_count, 502,             0
+
+RET_STALL_LENGTH_2900_count, 502,             0
+RET_STALL_LENGTH_2900_total_count, 502,             0
+
+RET_STALL_LENGTH_3000_count, 502,             0
+RET_STALL_LENGTH_3000_total_count, 502,             0
+
+RET_STALL_LENGTH_3100_count, 502,             0
+RET_STALL_LENGTH_3100_total_count, 502,             0
+
+RET_STALL_LENGTH_3200_count, 502,             0
+RET_STALL_LENGTH_3200_total_count, 502,             0
+
+RET_STALL_LENGTH_3300_count, 502,             0
+RET_STALL_LENGTH_3300_total_count, 502,             0
+
+RET_STALL_LENGTH_3400_count, 502,             0
+RET_STALL_LENGTH_3400_total_count, 502,             0
+
+RET_STALL_LENGTH_3500_count, 502,             0
+RET_STALL_LENGTH_3500_total_count, 502,             0
+
+RET_STALL_LENGTH_3600_count, 502,             0
+RET_STALL_LENGTH_3600_total_count, 502,             0
+
+RET_STALL_LENGTH_3700_count, 502,             0
+RET_STALL_LENGTH_3700_total_count, 502,             0
+
+RET_STALL_LENGTH_3800_count, 502,             0
+RET_STALL_LENGTH_3800_total_count, 502,             0
+
+RET_STALL_LENGTH_3900_count, 502,             0
+RET_STALL_LENGTH_3900_total_count, 502,             0
+
+RET_STALL_LENGTH_4000_count, 502,             0
+RET_STALL_LENGTH_4000_total_count, 502,             0
+
+RET_STALL_LENGTH_4100_count, 502,             0
+RET_STALL_LENGTH_4100_total_count, 502,             0
+
+RET_STALL_LENGTH_4200_count, 502,             0
+RET_STALL_LENGTH_4200_total_count, 502,             0
+
+RET_STALL_LENGTH_4300_count, 502,             0
+RET_STALL_LENGTH_4300_total_count, 502,             0
+
+RET_STALL_LENGTH_4400_count, 502,             0
+RET_STALL_LENGTH_4400_total_count, 502,             0
+
+RET_STALL_LENGTH_4500_count, 502,             0
+RET_STALL_LENGTH_4500_total_count, 502,             0
+
+RET_STALL_LENGTH_4600_count, 502,             0
+RET_STALL_LENGTH_4600_total_count, 502,             0
+
+RET_STALL_LENGTH_4700_count, 502,             0
+RET_STALL_LENGTH_4700_total_count, 502,             0
+
+RET_STALL_LENGTH_4800_count, 502,             0
+RET_STALL_LENGTH_4800_total_count, 502,             0
+
+RET_STALL_LENGTH_4900_count, 502,             0
+RET_STALL_LENGTH_4900_total_count, 502,             0
+
+RET_STALL_LENGTH_5000_count, 502,             0
+RET_STALL_LENGTH_5000_total_count, 502,             0
+
+MEM_BLOCK_LENGTH_0_count, 503,             0
+MEM_BLOCK_LENGTH_0_total_count, 503,             9
+
+MEM_BLOCK_LENGTH_100_count, 503,             0
+MEM_BLOCK_LENGTH_100_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_200_count, 503,             0
+MEM_BLOCK_LENGTH_200_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_300_count, 503,             0
+MEM_BLOCK_LENGTH_300_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_400_count, 503,             0
+MEM_BLOCK_LENGTH_400_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_500_count, 503,             0
+MEM_BLOCK_LENGTH_500_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_600_count, 503,             0
+MEM_BLOCK_LENGTH_600_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_700_count, 503,             0
+MEM_BLOCK_LENGTH_700_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_800_count, 503,             0
+MEM_BLOCK_LENGTH_800_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_900_count, 503,             0
+MEM_BLOCK_LENGTH_900_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1000_count, 503,             0
+MEM_BLOCK_LENGTH_1000_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1100_count, 503,             0
+MEM_BLOCK_LENGTH_1100_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1200_count, 503,             0
+MEM_BLOCK_LENGTH_1200_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1300_count, 503,             0
+MEM_BLOCK_LENGTH_1300_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1400_count, 503,             0
+MEM_BLOCK_LENGTH_1400_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1500_count, 503,             0
+MEM_BLOCK_LENGTH_1500_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1600_count, 503,             0
+MEM_BLOCK_LENGTH_1600_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1700_count, 503,             0
+MEM_BLOCK_LENGTH_1700_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1800_count, 503,             0
+MEM_BLOCK_LENGTH_1800_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_1900_count, 503,             0
+MEM_BLOCK_LENGTH_1900_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2000_count, 503,             0
+MEM_BLOCK_LENGTH_2000_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2100_count, 503,             0
+MEM_BLOCK_LENGTH_2100_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2200_count, 503,             0
+MEM_BLOCK_LENGTH_2200_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2300_count, 503,             0
+MEM_BLOCK_LENGTH_2300_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2400_count, 503,             0
+MEM_BLOCK_LENGTH_2400_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2500_count, 503,             0
+MEM_BLOCK_LENGTH_2500_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2600_count, 503,             0
+MEM_BLOCK_LENGTH_2600_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2700_count, 503,             0
+MEM_BLOCK_LENGTH_2700_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2800_count, 503,             0
+MEM_BLOCK_LENGTH_2800_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_2900_count, 503,             0
+MEM_BLOCK_LENGTH_2900_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3000_count, 503,             0
+MEM_BLOCK_LENGTH_3000_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3100_count, 503,             0
+MEM_BLOCK_LENGTH_3100_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3200_count, 503,             0
+MEM_BLOCK_LENGTH_3200_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3300_count, 503,             0
+MEM_BLOCK_LENGTH_3300_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3400_count, 503,             0
+MEM_BLOCK_LENGTH_3400_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3500_count, 503,             0
+MEM_BLOCK_LENGTH_3500_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3600_count, 503,             0
+MEM_BLOCK_LENGTH_3600_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3700_count, 503,             0
+MEM_BLOCK_LENGTH_3700_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3800_count, 503,             0
+MEM_BLOCK_LENGTH_3800_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_3900_count, 503,             0
+MEM_BLOCK_LENGTH_3900_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4000_count, 503,             0
+MEM_BLOCK_LENGTH_4000_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4100_count, 503,             0
+MEM_BLOCK_LENGTH_4100_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4200_count, 503,             0
+MEM_BLOCK_LENGTH_4200_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4300_count, 503,             0
+MEM_BLOCK_LENGTH_4300_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4400_count, 503,             0
+MEM_BLOCK_LENGTH_4400_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4500_count, 503,             0
+MEM_BLOCK_LENGTH_4500_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4600_count, 503,             0
+MEM_BLOCK_LENGTH_4600_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4700_count, 503,             0
+MEM_BLOCK_LENGTH_4700_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4800_count, 503,             0
+MEM_BLOCK_LENGTH_4800_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_4900_count, 503,             0
+MEM_BLOCK_LENGTH_4900_total_count, 503,             0
+
+MEM_BLOCK_LENGTH_5000_count, 503,             0
+MEM_BLOCK_LENGTH_5000_total_count, 503,             0
+
+FUS_BUSY_ON_PATH_count, 0,      12339226
+FUS_BUSY_ON_PATH_pct, 0,        3.389
+FUS_BUSY_ON_PATH_total_count, 0,      37012304
+FUS_BUSY_ON_PATH_total_pct, 0,        3.315
+
+FUS_BUSY_OFF_PATH_count, 0,          8374
+FUS_BUSY_OFF_PATH_pct, 0,        0.002
+FUS_BUSY_OFF_PATH_total_count, 0,         31072
+FUS_BUSY_OFF_PATH_total_pct, 0,        0.003
+
+FU_BUSY_MEM_STALL_count, 0,         70206
+FU_BUSY_MEM_STALL_pct, 0,        0.019
+FU_BUSY_MEM_STALL_total_count, 0,        206148
+FU_BUSY_MEM_STALL_total_pct, 0,        0.018
+
+FUS_EMPTY_count, 0,      24059000
+FUS_EMPTY_pct, 0,        6.608
+FUS_EMPTY_total_count, 0,      74594834
+FUS_EMPTY_total_pct, 0,        6.682
+
+FU_UNAVAILABLE_count, 0,        569588
+FU_UNAVAILABLE_pct, 0,        0.156
+FU_UNAVAILABLE_total_count, 0,       1706860
+FU_UNAVAILABLE_total_pct, 0,        0.153
+
+FU_MEM_UNAVAILABLE_count, 0,         34320
+FU_MEM_UNAVAILABLE_pct, 0,        0.009
+FU_MEM_UNAVAILABLE_total_count, 0,        100378
+FU_MEM_UNAVAILABLE_total_pct, 0,        0.009
+
+FU_OTHER_UNAVAILABLE_count, 0,             0
+FU_OTHER_UNAVAILABLE_pct, 0,        0.000
+FU_OTHER_UNAVAILABLE_total_count, 0,             0
+FU_OTHER_UNAVAILABLE_total_pct, 0,        0.000
+
+FU_REPLAY_count, 0,             0
+FU_REPLAY_pct, 0,        0.000
+FU_REPLAY_total_count, 0,             0
+FU_REPLAY_total_pct, 0,        0.000
+
+FU_STARVED_count, 0,      24058356
+FU_STARVED_pct, 0,        6.608
+FU_STARVED_total_count, 0,      74592615
+FU_STARVED_total_pct, 0,        6.682
+
+CHIP_UTILIZATION_count, 0,             0
+CHIP_UTILIZATION_pct, 0,        0.000
+CHIP_UTILIZATION_total_count, 0,             0
+CHIP_UTILIZATION_total_pct, 0,        0.000
+
+CYCLES_UNDER_MEM_REQ_count, 0,             0
+CYCLES_UNDER_MEM_REQ_total_count, 0,             0
+
+CYCLES_UNDER_NO_MEM_REQ_count, 0,             0
+CYCLES_UNDER_NO_MEM_REQ_total_count, 0,             0
+
+CYCLES_UNDER_CRITICAL_MEM_REQ_count, 0,             0
+CYCLES_UNDER_CRITICAL_MEM_REQ_total_count, 0,             0
+
+CYCLES_UNDER_NONCRITICAL_MEM_REQ_count, 0,             0
+CYCLES_UNDER_NONCRITICAL_MEM_REQ_total_count, 0,             0
+
+CHIP_UTILIZATION_UNDER_MEM_REQ_count, 0,             0
+CHIP_UTILIZATION_UNDER_MEM_REQ_pct, 0,         -nan
+CHIP_UTILIZATION_UNDER_MEM_REQ_total_count, 0,             0
+CHIP_UTILIZATION_UNDER_MEM_REQ_total_pct, 0,         -nan
+
+CHIP_UTILIZATION_UNDER_NO_MEM_REQ_count, 0,             0
+CHIP_UTILIZATION_UNDER_NO_MEM_REQ_pct, 0,         -nan
+CHIP_UTILIZATION_UNDER_NO_MEM_REQ_total_count, 0,             0
+CHIP_UTILIZATION_UNDER_NO_MEM_REQ_total_pct, 0,         -nan
+
+CHIP_UTILIZATION_UNDER_CRITICAL_MEM_REQ_count, 0,             0
+CHIP_UTILIZATION_UNDER_CRITICAL_MEM_REQ_pct, 0,         -nan
+CHIP_UTILIZATION_UNDER_CRITICAL_MEM_REQ_total_count, 0,             0
+CHIP_UTILIZATION_UNDER_CRITICAL_MEM_REQ_total_pct, 0,         -nan
+
+CHIP_UTILIZATION_UNDER_NONCRITICAL_MEM_REQ_count, 0,             0
+CHIP_UTILIZATION_UNDER_NONCRITICAL_MEM_REQ_pct, 0,         -nan
+CHIP_UTILIZATION_UNDER_NONCRITICAL_MEM_REQ_total_count, 0,             0
+CHIP_UTILIZATION_UNDER_NONCRITICAL_MEM_REQ_total_pct, 0,         -nan
+
+CYCLES_NOT_WAITING_FOR_OFF_CHIP_count, 0,             0
+CYCLES_NOT_WAITING_FOR_OFF_CHIP_pct, 0,        0.000
+CYCLES_NOT_WAITING_FOR_OFF_CHIP_total_count, 0,             0
+CYCLES_NOT_WAITING_FOR_OFF_CHIP_total_pct, 0,        0.000
+
+FUS_BUSY_NOT_WAITING_FOR_OFF_CHIP_count, 0,             0
+FUS_BUSY_NOT_WAITING_FOR_OFF_CHIP_pct, 0,         -nan
+FUS_BUSY_NOT_WAITING_FOR_OFF_CHIP_total_count, 0,             0
+FUS_BUSY_NOT_WAITING_FOR_OFF_CHIP_total_pct, 0,         -nan
+
+CYCLES_WAITING_FOR_OFF_CHIP_count, 0,             0
+CYCLES_WAITING_FOR_OFF_CHIP_pct, 0,        0.000
+CYCLES_WAITING_FOR_OFF_CHIP_total_count, 0,             0
+CYCLES_WAITING_FOR_OFF_CHIP_total_pct, 0,        0.000
+
+FUS_BUSY_WAITING_FOR_OFF_CHIP_count, 0,             0
+FUS_BUSY_WAITING_FOR_OFF_CHIP_pct, 0,         -nan
+FUS_BUSY_WAITING_FOR_OFF_CHIP_total_count, 0,             0
+FUS_BUSY_WAITING_FOR_OFF_CHIP_total_pct, 0,         -nan
+
+TOTAL_OFF_CHIP_DELAYS_LEFT_count, 0,             0
+TOTAL_OFF_CHIP_DELAYS_LEFT_total_count, 0,             0
+
+WRONG_IO_SCHED_count, 0,             0
+WRONG_IO_SCHED_total_count, 0,             0
+
+DVFS_CONFIG_SWITCH_count, 0,             0
+DVFS_CONFIG_SWITCH_total_count, 0,             0
+
+MAP_STAGE_RECEIVED_OPS_0_count, 504,             0
+MAP_STAGE_RECEIVED_OPS_0_total_count, 504,             0
+
+MAP_STAGE_RECEIVED_OPS_1_count, 504,           210
+MAP_STAGE_RECEIVED_OPS_1_total_count, 504,           635
+
+MAP_STAGE_RECEIVED_OPS_2_count, 504,           118
+MAP_STAGE_RECEIVED_OPS_2_total_count, 504,           394
+
+MAP_STAGE_RECEIVED_OPS_3_count, 504,           135
+MAP_STAGE_RECEIVED_OPS_3_total_count, 504,           469
+
+MAP_STAGE_RECEIVED_OPS_4_count, 504,           246
+MAP_STAGE_RECEIVED_OPS_4_total_count, 504,           762
+
+MAP_STAGE_RECEIVED_OPS_5_count, 504,           192
+MAP_STAGE_RECEIVED_OPS_5_total_count, 504,           603
+
+MAP_STAGE_RECEIVED_OPS_6_count, 504,       1948507
+MAP_STAGE_RECEIVED_OPS_6_total_count, 504,       5845505
+
+MAP_STAGE_RECEIVED_OPS_7_count, 504,             0
+MAP_STAGE_RECEIVED_OPS_7_total_count, 504,             0
+
+MAP_STAGE_RECEIVED_OPS_8_count, 504,             0
+MAP_STAGE_RECEIVED_OPS_8_total_count, 504,             0
+
+MAP_STAGE_RECEIVED_OPS_MAX_count, 504,             0
+MAP_STAGE_RECEIVED_OPS_MAX_total_count, 504,             0
+
+MAP_STAGE_WAIT_FOR_DECODE_count, 505,             0
+MAP_STAGE_WAIT_FOR_DECODE_total_count, 505,             0
+
+MAP_STAGE_CONSUME_DECODE_count, 505,             0
+MAP_STAGE_CONSUME_DECODE_total_count, 505,             0
+
+MAP_STAGE_WAIT_FOR_DECODE2_count, 506,             0
+MAP_STAGE_WAIT_FOR_DECODE2_total_count, 506,             0
+
+MAP_STAGE_CONSUME_DECODE2_count, 506,             0
+MAP_STAGE_CONSUME_DECODE2_total_count, 506,             0
+
+FTQ_RECOVER_EXEC_count, 0,           170
+FTQ_RECOVER_EXEC_total_count, 0,           611
+
+FTQ_RECOVER_DECODE_count, 0,             0
+FTQ_RECOVER_DECODE_total_count, 0,            15
+
+FTQ_OFFPATH_CYCLES_count, 0,         32326
+FTQ_OFFPATH_CYCLES_total_count, 0,        108267
+
+FTQ_CYCLES_OFFPATH_count, 0,         32326
+FTQ_CYCLES_OFFPATH_total_count, 0,        108267
+
+FTQ_CYCLES_ONPATH_count, 0,       3608334
+FTQ_CYCLES_ONPATH_total_count, 0,      11055554
+
+FTQ_FETCHED_INS_ONPATH_count, 0,      11693687
+FTQ_FETCHED_INS_ONPATH_total_count, 0,      35083440
+
+FTQ_FETCHED_INS_OFFPATH_count, 0,        131192
+FTQ_FETCHED_INS_OFFPATH_total_count, 0,        443673
+
+FTQ_BREAK_FULL_FT_ONPATH_count, 0,       3595640
+FTQ_BREAK_FULL_FT_ONPATH_total_count, 0,      11018544
+
+FTQ_BREAK_FULL_FT_OFFPATH_count, 0,         26333
+FTQ_BREAK_FULL_FT_OFFPATH_total_count, 0,         86779
+
+FTQ_BREAK_PRED_BR_ONPATH_count, 0,             0
+FTQ_BREAK_PRED_BR_ONPATH_total_count, 0,             0
+
+FTQ_BREAK_PRED_BR_OFFPATH_count, 0,             0
+FTQ_BREAK_PRED_BR_OFFPATH_total_count, 0,             0
+
+FTQ_BREAK_BAR_FETCH_ONPATH_count, 0,             0
+FTQ_BREAK_BAR_FETCH_ONPATH_total_count, 0,             0
+
+FTQ_BREAK_BAR_FETCH_OFFPATH_count, 0,             0
+FTQ_BREAK_BAR_FETCH_OFFPATH_total_count, 0,             0
+
+FTQ_BREAK_MAX_CFS_TAKEN_ONPATH_count, 0,             0
+FTQ_BREAK_MAX_CFS_TAKEN_ONPATH_total_count, 0,             0
+
+FTQ_BREAK_MAX_CFS_TAKEN_OFFPATH_count, 0,             0
+FTQ_BREAK_MAX_CFS_TAKEN_OFFPATH_total_count, 0,             0
+
+FTQ_BREAK_MAX_FT_ONPATH_count, 0,         12401
+FTQ_BREAK_MAX_FT_ONPATH_total_count, 0,         36717
+
+FTQ_BREAK_MAX_FT_OFFPATH_count, 0,          5993
+FTQ_BREAK_MAX_FT_OFFPATH_total_count, 0,         21488
+
+DFE_GEN_ON_PATH_FT_count, 0,       1121171
+DFE_GEN_ON_PATH_FT_total_count, 0,       3362195
+
+DFE_GEN_OFF_PATH_FT_count, 0,         12881
+DFE_GEN_OFF_PATH_FT_total_count, 0,         42245
+
+DFE_L0_ENABLED_PREDICTIONS_count, 0,      11693687
+DFE_L0_ENABLED_PREDICTIONS_total_count, 0,      35083440
+
+DFE_L0_WRONG_MAIN_CORRECT_count, 0,           928
+DFE_L0_WRONG_MAIN_CORRECT_total_count, 0,          2833
+
+DFE_L0_WRONG_MAIN_WRONG_count, 0,           170
+DFE_L0_WRONG_MAIN_WRONG_total_count, 0,           603
+
+DFE_L0_CORRECT_MAIN_WRONG_count, 0,             0
+DFE_L0_CORRECT_MAIN_WRONG_total_count, 0,            23
+
+DFE_L0_CORRECT_MAIN_CORRECT_count, 0,      11692589
+DFE_L0_CORRECT_MAIN_CORRECT_total_count, 0,      35079981
+
+DFE_L0_WRONG_MAIN_CORRECT_RECOVERY_SCHEDULED_count, 0,             0
+DFE_L0_WRONG_MAIN_CORRECT_RECOVERY_SCHEDULED_total_count, 0,             0
+
+FTQ_SAW_BAR_FETCH_OFFPATH_count, 0,             2
+FTQ_SAW_BAR_FETCH_OFFPATH_total_count, 0,             8
+
+FTQ_SAW_BAR_FETCH_ONPATH_count, 0,            63
+FTQ_SAW_BAR_FETCH_ONPATH_total_count, 0,           192
+
+DFE_CONF_0_RECOVER_AT_EXEC_count, 507,             0
+DFE_CONF_0_RECOVER_AT_EXEC_total_count, 507,             0
+
+DFE_CONF_1_RECOVER_AT_EXEC_count, 507,             0
+DFE_CONF_1_RECOVER_AT_EXEC_total_count, 507,             0
+
+DFE_CONF_2_RECOVER_AT_EXEC_count, 507,             0
+DFE_CONF_2_RECOVER_AT_EXEC_total_count, 507,             0
+
+DFE_CONF_3_RECOVER_AT_EXEC_count, 507,             0
+DFE_CONF_3_RECOVER_AT_EXEC_total_count, 507,             0
+
+DFE_CONF_0_CORRECT_count, 507,             0
+DFE_CONF_0_CORRECT_total_count, 507,             0
+
+DFE_CONF_1_CORRECT_count, 507,             0
+DFE_CONF_1_CORRECT_total_count, 507,             0
+
+DFE_CONF_2_CORRECT_count, 507,             0
+DFE_CONF_2_CORRECT_total_count, 507,             0
+
+DFE_CONF_3_CORRECT_count, 507,             0
+DFE_CONF_3_CORRECT_total_count, 507,             0
+
+DFE_ON_CONF_ON_OPS_count, 508,             0
+DFE_ON_CONF_ON_OPS_total_count, 508,             0
+
+DFE_ON_CONF_OFF_OPS_count, 508,             0
+DFE_ON_CONF_OFF_OPS_total_count, 508,             0
+
+DFE_OFF_CONF_ON_OPS_count, 508,             0
+DFE_OFF_CONF_ON_OPS_total_count, 508,             0
+
+DFE_OFF_CONF_OFF_REALISTIC_OPS_count, 508,             0
+DFE_OFF_CONF_OFF_REALISTIC_OPS_total_count, 508,             0
+
+DFE_OFF_CONF_OFF_PERFECT_OPS_count, 508,             0
+DFE_OFF_CONF_OFF_PERFECT_OPS_total_count, 508,             0
+
+DFE_ON_CONF_ON_FETCH_TARGETS_count, 509,             0
+DFE_ON_CONF_ON_FETCH_TARGETS_total_count, 509,             0
+
+DFE_ON_CONF_OFF_FETCH_TARGETS_count, 509,             0
+DFE_ON_CONF_OFF_FETCH_TARGETS_total_count, 509,             0
+
+DFE_OFF_CONF_ON_FETCH_TARGETS_count, 509,             0
+DFE_OFF_CONF_ON_FETCH_TARGETS_total_count, 509,             0
+
+DFE_OFF_CONF_OFF_REALISTIC_FETCH_TARGETS_count, 509,             0
+DFE_OFF_CONF_OFF_REALISTIC_FETCH_TARGETS_total_count, 509,             0
+
+DFE_OFF_CONF_OFF_PERFECT_FETCH_TARGETS_count, 509,             0
+DFE_OFF_CONF_OFF_PERFECT_FETCH_TARGETS_total_count, 509,             0
+
+DFE_ON_CONF_ON_CYCLES_count, 510,             0
+DFE_ON_CONF_ON_CYCLES_total_count, 510,             0
+
+DFE_ON_CONF_OFF_CYCLES_count, 510,             0
+DFE_ON_CONF_OFF_CYCLES_total_count, 510,             0
+
+DFE_OFF_CONF_ON_CYCLES_count, 510,             0
+DFE_OFF_CONF_ON_CYCLES_total_count, 510,             0
+
+DFE_OFF_CONF_OFF_REALISTIC_CYCLES_count, 510,             0
+DFE_OFF_CONF_OFF_REALISTIC_CYCLES_total_count, 510,             0
+
+DFE_OFF_CONF_OFF_PERFECT_CYCLES_count, 510,             0
+DFE_OFF_CONF_OFF_PERFECT_CYCLES_total_count, 510,             0
+
+DFE_OFF_CONF_ON_NUM_EVENTS_count, 0,             0
+DFE_OFF_CONF_ON_NUM_EVENTS_total_count, 0,             0
+
+DFE_OFF_CONF_ON_NOT_IDENTIFIED_EVENTS_count, 511,             0
+DFE_OFF_CONF_ON_NOT_IDENTIFIED_EVENTS_total_count, 511,             0
+
+DFE_OFF_CONF_ON_IBTB_MISS_EVENTS_count, 511,             0
+DFE_OFF_CONF_ON_IBTB_MISS_EVENTS_total_count, 511,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_EVENTS_count, 511,             0
+DFE_OFF_CONF_ON_BTB_MISS_EVENTS_total_count, 511,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_RECOVER_AT_EXEC_EVENTS_count, 511,             0
+DFE_OFF_CONF_ON_BTB_MISS_RECOVER_AT_EXEC_EVENTS_total_count, 511,             0
+
+DFE_OFF_CONF_ON_RECOVER_AT_EXEC_EVENTS_count, 511,             0
+DFE_OFF_CONF_ON_RECOVER_AT_EXEC_EVENTS_total_count, 511,             0
+
+DFE_OFF_CONF_ON_RECOVER_AT_DECODE_EVENTS_count, 511,             0
+DFE_OFF_CONF_ON_RECOVER_AT_DECODE_EVENTS_total_count, 511,             0
+
+DFE_OFF_CONF_ON_LATE_BTB_HIT_EVENTS_count, 0,             0
+DFE_OFF_CONF_ON_LATE_BTB_HIT_EVENTS_total_count, 0,             0
+
+DFE_OFF_CONF_ON_NOT_IDENTIFIED_CYCLES_count, 512,             0
+DFE_OFF_CONF_ON_NOT_IDENTIFIED_CYCLES_total_count, 512,             0
+
+DFE_OFF_CONF_ON_IBTB_MISS_CYCLES_count, 512,             0
+DFE_OFF_CONF_ON_IBTB_MISS_CYCLES_total_count, 512,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CYCLES_count, 512,             0
+DFE_OFF_CONF_ON_BTB_MISS_CYCLES_total_count, 512,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_RECOVER_AT_EXEC_CYCLES_count, 512,             0
+DFE_OFF_CONF_ON_BTB_MISS_RECOVER_AT_EXEC_CYCLES_total_count, 512,             0
+
+DFE_OFF_CONF_ON_RECOVER_AT_EXEC_CYCLES_count, 512,             0
+DFE_OFF_CONF_ON_RECOVER_AT_EXEC_CYCLES_total_count, 512,             0
+
+DFE_OFF_CONF_ON_RECOVER_AT_DECODE_CYCLES_count, 512,             0
+DFE_OFF_CONF_ON_RECOVER_AT_DECODE_CYCLES_total_count, 512,             0
+
+DFE_OFF_CONF_ON_LATE_BTB_HIT_CYCLES_count, 0,             0
+DFE_OFF_CONF_ON_LATE_BTB_HIT_CYCLES_total_count, 0,             0
+
+DFE_OFF_CONF_ON_NOT_IDENTIFIED_FETCH_TARGETS_count, 513,             0
+DFE_OFF_CONF_ON_NOT_IDENTIFIED_FETCH_TARGETS_total_count, 513,             0
+
+DFE_OFF_CONF_ON_IBTB_MISS_FETCH_TARGETS_count, 513,             0
+DFE_OFF_CONF_ON_IBTB_MISS_FETCH_TARGETS_total_count, 513,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_FETCH_TARGETS_count, 513,             0
+DFE_OFF_CONF_ON_BTB_MISS_FETCH_TARGETS_total_count, 513,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_RECOVER_AT_EXEC_FETCH_TARGETS_count, 513,             0
+DFE_OFF_CONF_ON_BTB_MISS_RECOVER_AT_EXEC_FETCH_TARGETS_total_count, 513,             0
+
+DFE_OFF_CONF_ON_RECOVER_AT_EXEC_FETCH_TARGETS_count, 513,             0
+DFE_OFF_CONF_ON_RECOVER_AT_EXEC_FETCH_TARGETS_total_count, 513,             0
+
+DFE_OFF_CONF_ON_RECOVER_AT_DECODE_FETCH_TARGETS_count, 513,             0
+DFE_OFF_CONF_ON_RECOVER_AT_DECODE_FETCH_TARGETS_total_count, 513,             0
+
+DFE_OFF_CONF_ON_LATE_BTB_HIT_FETCH_TARGETS_count, 0,             0
+DFE_OFF_CONF_ON_LATE_BTB_HIT_FETCH_TARGETS_total_count, 0,             0
+
+DFE_OFF_CONF_ON_BP_INCORRECT_0_CONF_count, 514,             0
+DFE_OFF_CONF_ON_BP_INCORRECT_0_CONF_total_count, 514,             0
+
+DFE_OFF_CONF_ON_BP_INCORRECT_1_CONF_count, 514,             0
+DFE_OFF_CONF_ON_BP_INCORRECT_1_CONF_total_count, 514,             0
+
+DFE_OFF_CONF_ON_BP_INCORRECT_2_CONF_count, 514,             0
+DFE_OFF_CONF_ON_BP_INCORRECT_2_CONF_total_count, 514,             0
+
+DFE_OFF_CONF_ON_BP_INCORRECT_3_CONF_count, 514,             0
+DFE_OFF_CONF_ON_BP_INCORRECT_3_CONF_total_count, 514,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CBR_0_CONF_count, 515,             0
+DFE_OFF_CONF_ON_BTB_MISS_CBR_0_CONF_total_count, 515,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CBR_1_CONF_count, 515,             0
+DFE_OFF_CONF_ON_BTB_MISS_CBR_1_CONF_total_count, 515,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CBR_2_CONF_count, 515,             0
+DFE_OFF_CONF_ON_BTB_MISS_CBR_2_CONF_total_count, 515,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CBR_3_CONF_count, 515,             0
+DFE_OFF_CONF_ON_BTB_MISS_CBR_3_CONF_total_count, 515,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_NOT_CF_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_NOT_CF_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_BR_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_BR_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_CBR_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_CBR_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_CALL_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_CALL_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_IBR_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_IBR_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_ICALL_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_ICALL_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_ICO_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_ICO_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_RET_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_RET_total_count, 516,             0
+
+DFE_OFF_CONF_ON_BTB_MISS_CF_SYS_count, 516,             0
+DFE_OFF_CONF_ON_BTB_MISS_CF_SYS_total_count, 516,             0
+
+DFE_ON_CONF_OFF_NUM_EVENTS_count, 0,             0
+DFE_ON_CONF_OFF_NUM_EVENTS_total_count, 0,             0
+
+CONF_BTB_NUM_CYCLES_OFF_PATH_EVENT_count, 0,             0
+CONF_BTB_NUM_CYCLES_OFF_PATH_EVENT_total_count, 0,             0
+
+DFE_ON_CONF_OFF_IBTB_MISS_BP_TAKEN_count, 517,             0
+DFE_ON_CONF_OFF_IBTB_MISS_BP_TAKEN_total_count, 517,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_count, 517,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_total_count, 517,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_count, 517,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_total_count, 517,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_count, 517,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_total_count, 517,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_count, 517,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_total_count, 517,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_RATE_count, 517,             0
+DFE_ON_CONF_OFF_BTB_MISS_RATE_total_count, 517,             0
+
+DFE_ON_CONF_OFF_IBTB_MISS_RATE_count, 517,             0
+DFE_ON_CONF_OFF_IBTB_MISS_RATE_total_count, 517,             0
+
+DFE_ON_CONF_OFF_RECOVER_AT_DECODE_RATE_count, 517,             0
+DFE_ON_CONF_OFF_RECOVER_AT_DECODE_RATE_total_count, 517,             0
+
+DFE_ON_CONF_OFF_RECOVER_AT_EXEC_RATE_count, 517,             0
+DFE_ON_CONF_OFF_RECOVER_AT_EXEC_RATE_total_count, 517,             0
+
+DFE_ON_CONF_OFF_INV_CONF_INC_count, 517,             0
+DFE_ON_CONF_OFF_INV_CONF_INC_total_count, 517,             0
+
+DFE_ON_CONF_OFF_PERFECT_CONF_count, 517,             0
+DFE_ON_CONF_OFF_PERFECT_CONF_total_count, 517,             0
+
+DFE_ON_CONF_OFF_IBTB_MISS_BP_TAKEN_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_IBTB_MISS_BP_TAKEN_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_RATE_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_BTB_MISS_RATE_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_IBTB_MISS_RATE_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_IBTB_MISS_RATE_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_RECOVER_AT_DECODE_RATE_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_RECOVER_AT_DECODE_RATE_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_RECOVER_AT_EXEC_RATE_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_RECOVER_AT_EXEC_RATE_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_INV_CONF_INC_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_INV_CONF_INC_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_PERFECT_CONF_CYCLES_count, 518,             0
+DFE_ON_CONF_OFF_PERFECT_CONF_CYCLES_total_count, 518,             0
+
+DFE_ON_CONF_OFF_IBTB_MISS_BP_TAKEN_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_IBTB_MISS_BP_TAKEN_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_BTB_MISS_RATE_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_BTB_MISS_RATE_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_IBTB_MISS_RATE_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_IBTB_MISS_RATE_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_RECOVER_AT_DECODE_RATE_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_RECOVER_AT_DECODE_RATE_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_RECOVER_AT_EXEC_RATE_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_RECOVER_AT_EXEC_RATE_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_INV_CONF_INC_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_INV_CONF_INC_FETCH_TARGETS_total_count, 519,             0
+
+DFE_ON_CONF_OFF_PERFECT_CONF_FETCH_TARGETS_count, 519,             0
+DFE_ON_CONF_OFF_PERFECT_CONF_FETCH_TARGETS_total_count, 519,             0
+
+CONF_OFF_IBTB_MISS_BP_TAKEN_count, 520,             0
+CONF_OFF_IBTB_MISS_BP_TAKEN_total_count, 520,             0
+
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_count, 520,             0
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_0_total_count, 520,             0
+
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_count, 520,             0
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_1_total_count, 520,             0
+
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_count, 520,             0
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_2_total_count, 520,             0
+
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_count, 520,             0
+CONF_OFF_BTB_MISS_BP_TAKEN_CONF_3_total_count, 520,             0
+
+CONF_OFF_BTB_MISS_RATE_count, 520,             0
+CONF_OFF_BTB_MISS_RATE_total_count, 520,             0
+
+CONF_OFF_IBTB_MISS_RATE_count, 520,             0
+CONF_OFF_IBTB_MISS_RATE_total_count, 520,             0
+
+CONF_OFF_RECOVER_AT_DECODE_RATE_count, 520,             0
+CONF_OFF_RECOVER_AT_DECODE_RATE_total_count, 520,             0
+
+CONF_OFF_RECOVER_AT_EXEC_RATE_count, 520,             0
+CONF_OFF_RECOVER_AT_EXEC_RATE_total_count, 520,             0
+
+CONF_OFF_INV_CONF_INC_count, 520,             0
+CONF_OFF_INV_CONF_INC_total_count, 520,             0
+
+CONF_OFF_PERFECT_CONF_count, 520,             0
+CONF_OFF_PERFECT_CONF_total_count, 520,             0
+
+TOPDOWN_TOTAL_SLOTS_count, 0,      29125280
+TOPDOWN_TOTAL_SLOTS_total_count, 0,      89310568
+
+TOPDOWN_RETIRED_SLOTS_count, 0,      11693972
+TOPDOWN_RETIRED_SLOTS_total_count, 0,      35083298
+
+TOPDOWN_FETCH_BUBBLES_SLOTS_count, 0,        742059
+TOPDOWN_FETCH_BUBBLES_SLOTS_total_count, 0,       2261295
+
+TOPDOWN_BAD_SPEC_SLOTS_count, 0,        158025
+TOPDOWN_BAD_SPEC_SLOTS_total_count, 0,        529231
+
+TOPDOWN_BACKEND_STALL_SLOTS_count, 0,      16531224
+TOPDOWN_BACKEND_STALL_SLOTS_total_count, 0,      51436744
+
+TOPDOWN_FE_UOPC_FRAGMENTATION_SLOTS_count, 0,        731831
+TOPDOWN_FE_UOPC_FRAGMENTATION_SLOTS_total_count, 0,       2207593
+
+TOPDOWN_FE_UOPC_MISS_SLOTS_count, 0,          3556
+TOPDOWN_FE_UOPC_MISS_SLOTS_total_count, 0,         11054
+
+TOPDOWN_FE_ICACHE_MISS_SLOTS_count, 0,             0
+TOPDOWN_FE_ICACHE_MISS_SLOTS_total_count, 0,         25008
+
+TOPDOWN_MEM_LOAD_STALLS_CYCLES_count, 0,       2066361
+TOPDOWN_MEM_LOAD_STALLS_CYCLES_total_count, 0,       6429451
+
+TOPDOWN_MEM_STORE_STALLS_CYCLES_count, 0,             0
+TOPDOWN_MEM_STORE_STALLS_CYCLES_total_count, 0,             0
+
+TOPDOWN_EXEC_STALLS_CYCLES_count, 0,        585221
+TOPDOWN_EXEC_STALLS_CYCLES_total_count, 0,       1964166
+
+TOPDOWN_BACKEND_STALLS_CYCLES_count, 0,       2066403
+TOPDOWN_BACKEND_STALLS_CYCLES_total_count, 0,       6429593
+
+TOPDOWN_FETCH_BUBBLES_GT_MIW_CYCLES_count, 0,           834
+TOPDOWN_FETCH_BUBBLES_GT_MIW_CYCLES_total_count, 0,          5331
+
+TOPDOWN_BR_RECOVER_AT_EXEC_RETIRED_CYCLES_count, 0,           170
+TOPDOWN_BR_RECOVER_AT_EXEC_RETIRED_CYCLES_total_count, 0,           611
+
+TOPDOWN_MACHINE_CLEAR_CYCLES_count, 0,          1098
+TOPDOWN_MACHINE_CLEAR_CYCLES_total_count, 0,          3459
+
+TOPDOWN_FRONTEND_BOUND_count, 0,           254
+TOPDOWN_FRONTEND_BOUND_total_count, 0,           254
+
+TOPDOWN_BACKEND_BOUND_count, 0,          5677
+TOPDOWN_BACKEND_BOUND_total_count, 0,          5677
+
+TOPDOWN_BAD_SPEC_BOUND_count, 0,            54
+TOPDOWN_BAD_SPEC_BOUND_total_count, 0,            54
+
+TOPDOWN_RETIRING_BOUND_count, 0,          4015
+TOPDOWN_RETIRING_BOUND_total_count, 0,          4015
+
+TOPDOWN_FETCH_LATENCY_BOUND_count, 0,             2
+TOPDOWN_FETCH_LATENCY_BOUND_total_count, 0,             2
+
+TOPDOWN_FETCH_BANDWIDTH_BOUND_count, 0,           252
+TOPDOWN_FETCH_BANDWIDTH_BOUND_total_count, 0,           252
+
+TOPDOWN_FE_UOPC_FRAGMENTATION_BOUND_count, 0,           251
+TOPDOWN_FE_UOPC_FRAGMENTATION_BOUND_total_count, 0,           251
+
+TOPDOWN_FE_UOPC_MISS_BOUND_count, 0,             1
+TOPDOWN_FE_UOPC_MISS_BOUND_total_count, 0,             1
+
+TOPDOWN_FE_ICACHE_MISS_BOUND_count, 0,             0
+TOPDOWN_FE_ICACHE_MISS_BOUND_total_count, 0,             0
+
+TOPDOWN_MEM_BOUND_count, 0,          5676
+TOPDOWN_MEM_BOUND_total_count, 0,          5676
+
+TOPDOWN_CORE_BOUND_count, 0,             1
+TOPDOWN_CORE_BOUND_total_count, 0,             1
+
+TOPDOWN_BR_RECOVER_AT_EXEC_BOUND_count, 0,             7
+TOPDOWN_BR_RECOVER_AT_EXEC_BOUND_total_count, 0,             7
+
+TOPDOWN_MACHINE_CLEARS_BOUND_count, 0,            47
+TOPDOWN_MACHINE_CLEARS_BOUND_total_count, 0,            47
+
+H2P_SEEN_MAIN_count, 0,             0
+H2P_SEEN_MAIN_total_count, 0,             0
+
+
+
