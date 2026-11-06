@@ -677,26 +677,15 @@ void mem_free_req(Mem_Req* req) {
   ASSERT(req->proc_id, (mem->req_count + mem->req_pool_free_list.count) == mem->total_req_pool);
 }
 
-/* Cancel an RFP prefetch request, due to a wrong address prediction or a load beating the prefetch.
- * RFP no longer sends requests to memory (no Pref_Req_Info sets rfp_prefetch), so this and the other
- * rfp_* request fields in this file are inert. They are kept so the port matches hpca2027-rfp. */
+/* Cancel an RFP prefetch request in the memory system. RFP sends no requests to
+ * memory (no Pref_Req_Info sets rfp_prefetch; new_mem_req() asserts it), so there
+ * is never one to cancel. The original searched the request buffers and removed
+ * the match from its queue; that code targeted the pre-MSHR memory system. */
 Flag mem_cancel_rfp_prefetch(uns8 proc_id, uns16 prfid, Counter launch_cycle, Counter owner_unique) {
-  int ii;
-  /* Iterate through all the request buffers */
-  for (ii = 0; ii < mem->total_mem_req_buffers; ii++) {
-    Mem_Req* req = &mem->req_buffer[ii];
-
-    /* Check if the request is valid and matches the RFP prefetch request */
-    if (req->state == MRS_INV || req->proc_id != proc_id || !req->rfp_prefetch)
-      continue;
-    if (req->rfp_prfid != prfid || req->rfp_launch_cycle != launch_cycle || req->rfp_owner_unique != owner_unique)
-      continue;
-
-    /* Unreachable: no Pref_Req_Info sets rfp_prefetch, so no request matches. The
-     * original removed the request from its queue here; that code targeted the
-     * pre-MSHR memory system and is not ported. Fail loudly if this changes. */
-    ASSERTM(proc_id, FALSE, "RFP prefetch request found in memory; RFP should send none\n");
-  }
+  UNUSED(proc_id);
+  UNUSED(prfid);
+  UNUSED(launch_cycle);
+  UNUSED(owner_unique);
   return FALSE;
 }
 
@@ -728,11 +717,6 @@ static inline int queue_num_free(Mem_Queue* queue) {
   return (int)queue->size - queue->reserved_entry_count - queue->entry_count;
 }
 
-/* Number of currently-free request buffers in the shared pool. Used by the RFP demand-reserve
- * gate to throttle RFP prefetches under buffer pressure. */
-uns mem_num_free_req_buffers(void) {
-  return (uns)mem->req_buffer_free_list.count;
-}
 
 /**************************************************************************************/
 /* print_mem_queue: */
@@ -3307,6 +3291,7 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
   new_req->rfp_predicted_va = (pref_info ? pref_info->rfp_predicted_va : 0);
   new_req->rfp_launch_cycle = (pref_info ? pref_info->rfp_launch_cycle : 0);
   new_req->rfp_owner_unique = (pref_info ? pref_info->rfp_owner_unique : 0);
+  ASSERTM(proc_id, !new_req->rfp_prefetch, "RFP should send no requests to memory\n");
 
   /* Remove owner context from the request */
   if (new_req->rfp_prefetch && op && new_req->op_count) {

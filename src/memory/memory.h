@@ -243,7 +243,6 @@ void debug_memory(void);
 void update_memory(void);
 
 Flag scan_stores(Addr, uns);
-uns mem_num_free_req_buffers(void);
 void op_nuke_mem_req(Op*);
 L1_Data* do_l1_access(Op* op);
 L1_Data* do_l1_access_addr(Addr);
