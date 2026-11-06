@@ -1,8 +1,8 @@
 Core, 0, 0
-Cumulative_Cycles, 0, 10554171            
-Cumulative_Instructions, 0, 20000000            
-Periodic_Cycles, 0, 5187116             
-Periodic_Instructions, 0, 9999998             
+Cumulative_Cycles, 0, 15565738            
+Cumulative_Instructions, 0, 30000000            
+Periodic_Cycles, 0, 5126594             
+Periodic_Instructions, 0, 9999996             
 DCACHE_PREF_HIT_count, 0,             0
 DCACHE_PREF_HIT_total_count, 0,             0
 
@@ -21,8 +21,8 @@ DEMAND_PASS_LOW_OP_SCHEDULE_total_count, 529,             0
 DEMAND_LAST_SCHEDULE_count, 529,             0
 DEMAND_LAST_SCHEDULE_total_count, 529,             0
 
-SEND_MISS_REQ_QUEUE_count, 0,          6615
-SEND_MISS_REQ_QUEUE_total_count, 0,         25153
+SEND_MISS_REQ_QUEUE_count, 0,             0
+SEND_MISS_REQ_QUEUE_total_count, 0,         13443
 
 L1_DATA_EVICT_count, 0,             0
 L1_DATA_EVICT_total_count, 0,             0
@@ -36,14 +36,14 @@ PREF_SEND_TO_MEM_REQ_total_count, 530,             0
 PREF_SEND_TO_MEM_REQ_FAIL_count, 530,             0
 PREF_SEND_TO_MEM_REQ_FAIL_total_count, 530,             0
 
-HIT_TRAIN_STREAM_count, 531,          6539
-HIT_TRAIN_STREAM_total_count, 531,         19882
+HIT_TRAIN_STREAM_count, 531,             0
+HIT_TRAIN_STREAM_total_count, 531,          8430
 
-MISS_TRAIN_STREAM_count, 531,             2
-MISS_TRAIN_STREAM_total_count, 531,           441
+MISS_TRAIN_STREAM_count, 531,             0
+MISS_TRAIN_STREAM_total_count, 531,           435
 
 STREAM_TRAIN_CREATE_count, 0,             0
-STREAM_TRAIN_CREATE_total_count, 0,           240
+STREAM_TRAIN_CREATE_total_count, 0,           234
 
 MEM_REQ_MISS_HWP_PREF_Q_count, 532,             0
 MEM_REQ_MISS_HWP_PREF_Q_total_count, 532,             0
@@ -184,7 +184,7 @@ REMOVE_REDUNDANT_STREAM_STAT_count, 0,             0
 REMOVE_REDUNDANT_STREAM_STAT_total_count, 0,             0
 
 REPLACE_OLD_STREAM_count, 0,             0
-REPLACE_OLD_STREAM_total_count, 0,           224
+REPLACE_OLD_STREAM_total_count, 0,           218
 
 REQ_SEND_QUEUE_STALL_count, 0,             0
 REQ_SEND_QUEUE_STALL_total_count, 0,             0
@@ -192,17 +192,17 @@ REQ_SEND_QUEUE_STALL_total_count, 0,             0
 STREAM_ENTER_RA_count, 0,             0
 STREAM_ENTER_RA_total_count, 0,             0
 
-CORE_STREAM_LENGTH_0_count, 543,             0
-CORE_STREAM_LENGTH_0_total_count, 543,             3
+CORE_STREAM_LENGTH_0_count, 543,             2
+CORE_STREAM_LENGTH_0_total_count, 543,             6
 
-CORE_STREAM_LENGTH_10_count, 543,             4
-CORE_STREAM_LENGTH_10_total_count, 543,            12
+CORE_STREAM_LENGTH_10_count, 543,             3
+CORE_STREAM_LENGTH_10_total_count, 543,            10
 
 CORE_STREAM_LENGTH_20_count, 543,             1
-CORE_STREAM_LENGTH_20_total_count, 543,             2
+CORE_STREAM_LENGTH_20_total_count, 543,             6
 
-CORE_STREAM_LENGTH_30_count, 543,             3
-CORE_STREAM_LENGTH_30_total_count, 543,             3
+CORE_STREAM_LENGTH_30_count, 543,             0
+CORE_STREAM_LENGTH_30_total_count, 543,             0
 
 CORE_STREAM_LENGTH_40_count, 543,             0
 CORE_STREAM_LENGTH_40_total_count, 543,             0
@@ -222,20 +222,20 @@ CORE_STREAM_LENGTH_80_total_count, 543,             0
 CORE_STREAM_LENGTH_90_count, 543,             0
 CORE_STREAM_LENGTH_90_total_count, 543,             0
 
-CORE_STREAM_LENGTH_100_P_count, 543,             2
+CORE_STREAM_LENGTH_100_P_count, 543,             0
 CORE_STREAM_LENGTH_100_P_total_count, 543,             3
 
-CORE_CUM_STREAM_LENGTH_0_count, 544,             0
-CORE_CUM_STREAM_LENGTH_0_total_count, 544,            18
+CORE_CUM_STREAM_LENGTH_0_count, 544,            15
+CORE_CUM_STREAM_LENGTH_0_total_count, 544,            40
 
-CORE_CUM_STREAM_LENGTH_10_count, 544,            55
-CORE_CUM_STREAM_LENGTH_10_total_count, 544,           154
+CORE_CUM_STREAM_LENGTH_10_count, 544,            47
+CORE_CUM_STREAM_LENGTH_10_total_count, 544,           134
 
-CORE_CUM_STREAM_LENGTH_20_count, 544,            20
-CORE_CUM_STREAM_LENGTH_20_total_count, 544,            46
+CORE_CUM_STREAM_LENGTH_20_count, 544,            24
+CORE_CUM_STREAM_LENGTH_20_total_count, 544,           143
 
-CORE_CUM_STREAM_LENGTH_30_count, 544,           107
-CORE_CUM_STREAM_LENGTH_30_total_count, 544,           107
+CORE_CUM_STREAM_LENGTH_30_count, 544,             0
+CORE_CUM_STREAM_LENGTH_30_total_count, 544,             0
 
 CORE_CUM_STREAM_LENGTH_40_count, 544,             0
 CORE_CUM_STREAM_LENGTH_40_total_count, 544,             0
@@ -255,14 +255,14 @@ CORE_CUM_STREAM_LENGTH_80_total_count, 544,             0
 CORE_CUM_STREAM_LENGTH_90_count, 544,             0
 CORE_CUM_STREAM_LENGTH_90_total_count, 544,             0
 
-CORE_CUM_STREAM_LENGTH_100_P_count, 544,         11829
-CORE_CUM_STREAM_LENGTH_100_P_total_count, 544,         20023
+CORE_CUM_STREAM_LENGTH_100_P_count, 544,             0
+CORE_CUM_STREAM_LENGTH_100_P_total_count, 544,          8414
 
-CORE_STREAM_TRAIN_HITS_0_count, 545,             4
-CORE_STREAM_TRAIN_HITS_0_total_count, 545,            16
+CORE_STREAM_TRAIN_HITS_0_count, 545,             3
+CORE_STREAM_TRAIN_HITS_0_total_count, 545,            17
 
-CORE_STREAM_TRAIN_HITS_10_count, 545,             4
-CORE_STREAM_TRAIN_HITS_10_total_count, 545,             4
+CORE_STREAM_TRAIN_HITS_10_count, 545,             3
+CORE_STREAM_TRAIN_HITS_10_total_count, 545,             5
 
 CORE_STREAM_TRAIN_HITS_20_count, 545,             0
 CORE_STREAM_TRAIN_HITS_20_total_count, 545,             0
@@ -288,14 +288,14 @@ CORE_STREAM_TRAIN_HITS_80_total_count, 545,             0
 CORE_STREAM_TRAIN_HITS_90_count, 545,             0
 CORE_STREAM_TRAIN_HITS_90_total_count, 545,             0
 
-CORE_STREAM_TRAIN_HITS_100_P_count, 545,             2
+CORE_STREAM_TRAIN_HITS_100_P_count, 545,             0
 CORE_STREAM_TRAIN_HITS_100_P_total_count, 545,             3
 
-CORE_CUM_STREAM_TRAIN_HITS_0_count, 546,            28
-CORE_CUM_STREAM_TRAIN_HITS_0_total_count, 546,           103
+CORE_CUM_STREAM_TRAIN_HITS_0_count, 546,            19
+CORE_CUM_STREAM_TRAIN_HITS_0_total_count, 546,           109
 
-CORE_CUM_STREAM_TRAIN_HITS_10_count, 546,            56
-CORE_CUM_STREAM_TRAIN_HITS_10_total_count, 546,            56
+CORE_CUM_STREAM_TRAIN_HITS_10_count, 546,            34
+CORE_CUM_STREAM_TRAIN_HITS_10_total_count, 546,            59
 
 CORE_CUM_STREAM_TRAIN_HITS_20_count, 546,             0
 CORE_CUM_STREAM_TRAIN_HITS_20_total_count, 546,             0
@@ -321,11 +321,11 @@ CORE_CUM_STREAM_TRAIN_HITS_80_total_count, 546,             0
 CORE_CUM_STREAM_TRAIN_HITS_90_count, 546,             0
 CORE_CUM_STREAM_TRAIN_HITS_90_total_count, 546,             0
 
-CORE_CUM_STREAM_TRAIN_HITS_100_P_count, 546,         11637
-CORE_CUM_STREAM_TRAIN_HITS_100_P_total_count, 546,         19815
+CORE_CUM_STREAM_TRAIN_HITS_100_P_count, 546,             0
+CORE_CUM_STREAM_TRAIN_HITS_100_P_total_count, 546,          8362
 
 CORE_STREAM_TRAIN_CREATE_count, 0,             0
-CORE_STREAM_TRAIN_CREATE_total_count, 0,           240
+CORE_STREAM_TRAIN_CREATE_total_count, 0,           234
 
 
 

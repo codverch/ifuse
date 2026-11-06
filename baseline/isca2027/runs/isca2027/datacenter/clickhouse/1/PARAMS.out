@@ -1,11 +1,11 @@
 --mode full
 --model cmp
 --frontend memtrace
---inst_limit 20000000
+--inst_limit 30000000
 --sim_limit none
---memtrace_roi_begin 1
---memtrace_roi_end 20000000
---full_warmup 10000000
+--memtrace_roi_begin 60000001
+--memtrace_roi_end 90000000
+--full_warmup 20000000
 --use_fetched_count 1
 --bindir /home/deepanjm/scarab-baseline/bin
 --dump_params 1
@@ -165,16 +165,16 @@ Parameter status at compile time and values supplied on the command line:
 SIM_MODE                                 0                               full
 SIM_MODEL                                0                               cmp
 FRONTEND                                 FE_PIN_EXEC_DRIVEN              memtrace
-INST_LIMIT                               NULL                            20000000
+INST_LIMIT                               NULL                            30000000
 SIM_LIMIT                                "none"                          none
 FORWARD_PROGRESS_LIMIT                   100000000                       
 FORWARD_PROGRESS_INTERVAL                10000                           
 FAST_FORWARD                             0                               
 FAST_FORWARD_TRACE_INS                   0                               
 FAST_FORWARD_UNTIL_ADDR                  0                               
-MEMTRACE_ROI_BEGIN                       0                               1
-MEMTRACE_ROI_END                         0                               20000000
-FULL_WARMUP                              0                               10000000
+MEMTRACE_ROI_BEGIN                       0                               60000001
+MEMTRACE_ROI_END                         0                               90000000
+FULL_WARMUP                              0                               20000000
 WARMUP                                   0                               
 HEARTBEAT_INTERVAL                       1000000                         
 NUM_HEARTBEATS                           0                               

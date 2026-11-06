@@ -1,0 +1,271 @@
+Core, 0, 0
+Cumulative_Cycles, 0, 15647839            
+Cumulative_Instructions, 0, 30000000            
+Periodic_Cycles, 0, 5131011             
+Periodic_Instructions, 0, 9999996             
+POWER_STATS_BEGIN_count, 0,             0
+POWER_STATS_BEGIN_total_count, 0,             0
+
+POWER_TIME_count, 0, 1603440937500
+POWER_TIME_total_count, 0, 4889949687500
+
+POWER_CYCLE_count, 0,       5131011
+POWER_CYCLE_total_count, 0,      15647839
+
+POWER_ITLB_ACCESS_count, 0,        229863
+POWER_ITLB_ACCESS_total_count, 0,        708490
+
+POWER_DTLB_ACCESS_count, 0,       2038292
+POWER_DTLB_ACCESS_total_count, 0,       6110757
+
+POWER_ICACHE_ACCESS_count, 0,        229863
+POWER_ICACHE_ACCESS_total_count, 0,        708490
+
+POWER_ICACHE_MISS_count, 0,          9910
+POWER_ICACHE_MISS_total_count, 0,         32188
+
+POWER_BTB_READ_count, 0,       2518403
+POWER_BTB_READ_total_count, 0,       7691999
+
+POWER_BTB_WRITE_count, 0,        131003
+POWER_BTB_WRITE_total_count, 0,        399146
+
+POWER_ROB_READ_count, 0,      11978463
+POWER_ROB_READ_total_count, 0,      35963353
+
+POWER_ROB_WRITE_count, 0,      11978463
+POWER_ROB_WRITE_total_count, 0,      35963353
+
+POWER_RENAME_READ_count, 0,      23922884
+POWER_RENAME_READ_total_count, 0,      71824878
+
+POWER_RENAME_WRITE_count, 0,      11961442
+POWER_RENAME_WRITE_total_count, 0,      35912439
+
+POWER_FP_RENAME_READ_count, 0,         34042
+POWER_FP_RENAME_READ_total_count, 0,        101828
+
+POWER_FP_RENAME_WRITE_count, 0,         17021
+POWER_FP_RENAME_WRITE_total_count, 0,         50914
+
+POWER_FUNCTION_CALL_count, 0,         40906
+POWER_FUNCTION_CALL_total_count, 0,        126796
+
+POWER_INST_WINDOW_READ_count, 0,      11961442
+POWER_INST_WINDOW_READ_total_count, 0,      35912439
+
+POWER_INST_WINDOW_WRITE_count, 0,      11961442
+POWER_INST_WINDOW_WRITE_total_count, 0,      35912439
+
+POWER_INT_REGFILE_READ_count, 0,      20205688
+POWER_INT_REGFILE_READ_total_count, 0,      60417288
+
+POWER_INT_REGFILE_WRITE_count, 0,       7316447
+POWER_INT_REGFILE_WRITE_total_count, 0,      21940916
+
+POWER_IALU_ACCESS_count, 0,      11961442
+POWER_IALU_ACCESS_total_count, 0,      35912439
+
+POWER_CDB_IALU_ACCESS_count, 0,      11961442
+POWER_CDB_IALU_ACCESS_total_count, 0,      35912439
+
+POWER_MUL_ACCESS_count, 0,             0
+POWER_MUL_ACCESS_total_count, 0,             0
+
+POWER_CDB_MUL_ACCESS_count, 0,             0
+POWER_CDB_MUL_ACCESS_total_count, 0,             0
+
+POWER_FP_INST_WINDOW_WRITE_count, 0,         17021
+POWER_FP_INST_WINDOW_WRITE_total_count, 0,         50914
+
+POWER_FP_INST_WINDOW_READ_count, 0,         17021
+POWER_FP_INST_WINDOW_READ_total_count, 0,         50914
+
+POWER_FP_REGFILE_READ_count, 0,         19781
+POWER_FP_REGFILE_READ_total_count, 0,         58916
+
+POWER_FP_REGFILE_WRITE_count, 0,         17021
+POWER_FP_REGFILE_WRITE_total_count, 0,         50914
+
+POWER_FPU_ACCESS_count, 0,         17021
+POWER_FPU_ACCESS_total_count, 0,         50914
+
+POWER_CDB_FPU_ACCESS_count, 0,         17021
+POWER_CDB_FPU_ACCESS_total_count, 0,         50914
+
+POWER_DCACHE_READ_ACCESS_count, 0,       2253994
+POWER_DCACHE_READ_ACCESS_total_count, 0,       6757399
+
+POWER_DCACHE_WRITE_ACCESS_count, 0,       2036984
+POWER_DCACHE_WRITE_ACCESS_total_count, 0,       6106720
+
+POWER_DCACHE_READ_MISS_count, 0,       1759045
+POWER_DCACHE_READ_MISS_total_count, 0,       5234415
+
+POWER_DCACHE_WRITE_MISS_count, 0,       1700230
+POWER_DCACHE_WRITE_MISS_total_count, 0,       5332315
+
+POWER_MLC_READ_ACCESS_count, 0,             0
+POWER_MLC_READ_ACCESS_total_count, 0,             0
+
+POWER_MLC_WRITE_ACCESS_count, 0,             0
+POWER_MLC_WRITE_ACCESS_total_count, 0,             0
+
+POWER_MLC_READ_MISS_count, 0,             0
+POWER_MLC_READ_MISS_total_count, 0,             0
+
+POWER_MLC_WRITE_MISS_count, 0,             0
+POWER_MLC_WRITE_MISS_total_count, 0,             0
+
+POWER_LLC_READ_ACCESS_count, 0,         13199
+POWER_LLC_READ_ACCESS_total_count, 0,         69278
+
+POWER_LLC_WRITE_ACCESS_count, 0,             0
+POWER_LLC_WRITE_ACCESS_total_count, 0,             0
+
+POWER_LLC_READ_MISS_count, 0,          6580
+POWER_LLC_READ_MISS_total_count, 0,         44240
+
+POWER_LLC_WRITE_MISS_count, 0,             0
+POWER_LLC_WRITE_MISS_total_count, 0,             0
+
+POWER_MEMORY_ACCESS_count, 0,             0
+POWER_MEMORY_ACCESS_total_count, 0,             0
+
+POWER_MEMORY_READ_ACCESS_count, 0,             0
+POWER_MEMORY_READ_ACCESS_total_count, 0,             0
+
+POWER_MEMORY_WRITE_ACCESS_count, 0,             0
+POWER_MEMORY_WRITE_ACCESS_total_count, 0,             0
+
+POWER_INST_WINDOW_WAKEUP_ACCESS_count, 0,      11961442
+POWER_INST_WINDOW_WAKEUP_ACCESS_total_count, 0,      35912439
+
+POWER_FP_INST_WINDOW_WAKEUP_ACCESS_count, 0,         17021
+POWER_FP_INST_WINDOW_WAKEUP_ACCESS_total_count, 0,         50914
+
+POWER_L1DIREC_READ_ACCESS_count, 0,             0
+POWER_L1DIREC_READ_ACCESS_total_count, 0,             0
+
+POWER_L1DIREC_WRITE_ACCESS_count, 0,             0
+POWER_L1DIREC_WRITE_ACCESS_total_count, 0,             0
+
+POWER_L1DIREC_READ_MISS_count, 0,             0
+POWER_L1DIREC_READ_MISS_total_count, 0,             0
+
+POWER_L1DIREC_WRITE_MISS_count, 0,             0
+POWER_L1DIREC_WRITE_MISS_total_count, 0,             0
+
+POWER_L2DIREC_READ_ACCESS_count, 0,             0
+POWER_L2DIREC_READ_ACCESS_total_count, 0,             0
+
+POWER_L2DIREC_WRITE_ACCESS_count, 0,             0
+POWER_L2DIREC_WRITE_ACCESS_total_count, 0,             0
+
+POWER_L2DIREC_READ_MISS_count, 0,             0
+POWER_L2DIREC_READ_MISS_total_count, 0,             0
+
+POWER_L2DIREC_WRITE_MISS_count, 0,             0
+POWER_L2DIREC_WRITE_MISS_total_count, 0,             0
+
+POWER_MEMORY_CTRL_ACCESS_count, 0,          6580
+POWER_MEMORY_CTRL_ACCESS_total_count, 0,         44240
+
+POWER_MEMORY_CTRL_READ_count, 0,          6580
+POWER_MEMORY_CTRL_READ_total_count, 0,         44240
+
+POWER_MEMORY_CTRL_WRITE_count, 0,             0
+POWER_MEMORY_CTRL_WRITE_total_count, 0,             0
+
+POWER_OP_count, 0,      11978463
+POWER_OP_total_count, 0,      35963353
+
+POWER_INT_OP_count, 0,       8571199
+POWER_INT_OP_total_count, 0,      25792064
+
+POWER_FP_OP_count, 0,       3401614
+POWER_FP_OP_total_count, 0,      10128024
+
+POWER_LD_OP_count, 0,       2254310
+POWER_LD_OP_total_count, 0,       6759128
+
+POWER_ST_OP_count, 0,       2038292
+POWER_ST_OP_total_count, 0,       6110757
+
+POWER_BRANCH_RECOVER_AT_EXEC_count, 0,        131003
+POWER_BRANCH_RECOVER_AT_EXEC_total_count, 0,        399146
+
+POWER_COMMITTED_OP_count, 0,      11913992
+POWER_COMMITTED_OP_total_count, 0,      35714366
+
+POWER_COMMITTED_INT_OP_count, 0,       8513180
+POWER_COMMITTED_INT_OP_total_count, 0,      25589519
+
+POWER_COMMITTED_FP_OP_count, 0,       3400812
+POWER_COMMITTED_FP_OP_total_count, 0,      10124847
+
+POWER_BRANCH_OP_count, 0,       1231919
+POWER_BRANCH_OP_total_count, 0,       3720335
+
+POWER_DRAM_PRECHARGE_count, 0,           204
+POWER_DRAM_PRECHARGE_total_count, 0,          1665
+
+POWER_DRAM_ACTIVATE_count, 0,           496
+POWER_DRAM_ACTIVATE_total_count, 0,          3042
+
+POWER_DRAM_READ_count, 0,          6580
+POWER_DRAM_READ_total_count, 0,         44240
+
+POWER_DRAM_WRITE_count, 0,             0
+POWER_DRAM_WRITE_total_count, 0,             0
+
+POWER_STATS_END_count, 0,             0
+POWER_STATS_END_total_count, 0,             0
+
+ENERGY_value, 0,      0.000000
+ENERGY_total_value, 0,      0.000000
+
+ENERGY_CORE_value, 0,      0.000000
+ENERGY_CORE_total_value, 0,      0.000000
+
+ENERGY_UNCORE_value, 0,      0.000000
+ENERGY_UNCORE_total_value, 0,      0.000000
+
+ENERGY_MEMORY_value, 0,      0.000000
+ENERGY_MEMORY_total_value, 0,      0.000000
+
+ENERGY_OTHER_value, 0,      0.000000
+ENERGY_OTHER_total_value, 0,      0.000000
+
+ENERGY_CORE_STATIC_value, 0,      0.000000
+ENERGY_CORE_STATIC_total_value, 0,      0.000000
+
+ENERGY_CORE_DYNAMIC_value, 0,      0.000000
+ENERGY_CORE_DYNAMIC_total_value, 0,      0.000000
+
+ENERGY_UNCORE_STATIC_value, 0,      0.000000
+ENERGY_UNCORE_STATIC_total_value, 0,      0.000000
+
+ENERGY_UNCORE_DYNAMIC_value, 0,      0.000000
+ENERGY_UNCORE_DYNAMIC_total_value, 0,      0.000000
+
+ENERGY_MEMORY_STATIC_value, 0,      0.000000
+ENERGY_MEMORY_STATIC_total_value, 0,      0.000000
+
+ENERGY_MEMORY_DYNAMIC_value, 0,      0.000000
+ENERGY_MEMORY_DYNAMIC_total_value, 0,      0.000000
+
+ENERGY_OTHER_STATIC_value, 0,      0.000000
+ENERGY_OTHER_STATIC_total_value, 0,      0.000000
+
+ENERGY_OTHER_DYNAMIC_value, 0,      0.000000
+ENERGY_OTHER_DYNAMIC_total_value, 0,      0.000000
+
+TIME_value, 0,      0.000000
+TIME_total_value, 0,      0.000000
+
+ENERGY_STATS_END_count, 0,             0
+ENERGY_STATS_END_total_count, 0,             0
+
+
+

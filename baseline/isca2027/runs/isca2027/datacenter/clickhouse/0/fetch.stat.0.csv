@@ -1,0 +1,558 @@
+Core, 0, 0
+Cumulative_Cycles, 0, 15647839            
+Cumulative_Instructions, 0, 30000000            
+Periodic_Cycles, 0, 5131011             
+Periodic_Instructions, 0, 9999996             
+MISS_WAIT_TIME_count, 0,  129311532098
+MISS_WAIT_TIME_total_count, 0,  236098626349
+
+ICACHE_STAGE_MISS_count, 0,          9910
+ICACHE_STAGE_MISS_total_count, 0,         32151
+
+ICACHE_CYCLE_count, 0,       5131011
+ICACHE_CYCLE_total_count, 0,      15647839
+
+TCACHE_CYCLE_count, 0,             0
+TCACHE_CYCLE_total_count, 0,             0
+
+ICACHE_SERVING_CYCLE_ON_PATH_count, 0,        363742
+ICACHE_SERVING_CYCLE_ON_PATH_total_count, 0,       1089067
+
+ICACHE_SERVING_CYCLE_OFF_PATH_count, 0,        136750
+ICACHE_SERVING_CYCLE_OFF_PATH_total_count, 0,        450171
+
+UCACHE_SERVING_CYCLE_ON_PATH_count, 0,       4413617
+UCACHE_SERVING_CYCLE_ON_PATH_total_count, 0,      13285453
+
+UCACHE_SERVING_CYCLE_OFF_PATH_count, 0,        118216
+UCACHE_SERVING_CYCLE_OFF_PATH_total_count, 0,        395056
+
+ICACHE_CYCLE_ONPATH_count, 1,       4866583
+ICACHE_CYCLE_ONPATH_total_count, 1,      14753836
+
+ICACHE_CYCLE_OFFPATH_count, 1,        264428
+ICACHE_CYCLE_OFFPATH_total_count, 1,        894003
+
+FETCH_ON_PATH_count, 2,       4873866
+FETCH_ON_PATH_total_count, 2,      14782299
+
+FETCH_OFF_PATH_count, 2,        257145
+FETCH_OFF_PATH_total_count, 2,        865540
+
+FETCHED_OPS_ON_PATH_count, 3,             0
+FETCHED_OPS_ON_PATH_total_count, 3,             0
+
+FETCHED_OPS_OFF_PATH_count, 3,             0
+FETCHED_OPS_OFF_PATH_total_count, 3,             0
+
+INST_LOST_FETCH_count, 4,      11913509
+INST_LOST_FETCH_total_count, 4,      35714366
+
+INST_LOST_OFF_PATH_count, 4,        791918
+INST_LOST_OFF_PATH_total_count, 4,       2761903
+
+INST_LOST_FULL_WINDOW_count, 4,       3425360
+INST_LOST_FULL_WINDOW_total_count, 4,      10208440
+
+INST_LOST_ROB_STALL_OTHER_count, 4,      17335340
+INST_LOST_ROB_STALL_OTHER_total_count, 4,      51818648
+
+INST_LOST_ROB_STALL_WAIT_FOR_RECOVERY_count, 4,             0
+INST_LOST_ROB_STALL_WAIT_FOR_RECOVERY_total_count, 4,             0
+
+INST_LOST_ROB_STALL_WAIT_FOR_REDIRECT_count, 4,             0
+INST_LOST_ROB_STALL_WAIT_FOR_REDIRECT_total_count, 4,             0
+
+INST_LOST_ROB_STALL_WAIT_FOR_GAP_FILL_count, 4,             0
+INST_LOST_ROB_STALL_WAIT_FOR_GAP_FILL_total_count, 4,             0
+
+INST_LOST_ROB_STALL_WAIT_FOR_L1_MISS_count, 4,             0
+INST_LOST_ROB_STALL_WAIT_FOR_L1_MISS_total_count, 4,             0
+
+INST_LOST_ROB_STALL_WAIT_FOR_MEMORY_count, 4,             0
+INST_LOST_ROB_STALL_WAIT_FOR_MEMORY_total_count, 4,        683360
+
+INST_LOST_ROB_STALL_WAIT_FOR_DC_MISS_count, 4,       2643754
+INST_LOST_ROB_STALL_WAIT_FOR_DC_MISS_total_count, 4,       7834252
+
+INST_LOST_ROB_BLOCK_ISSUE_FULL_count, 4,             0
+INST_LOST_ROB_BLOCK_ISSUE_FULL_total_count, 4,             0
+
+INST_LOST_ROB_BLOCK_ISSUE_GAP_TOO_LARGE_count, 4,             0
+INST_LOST_ROB_BLOCK_ISSUE_GAP_TOO_LARGE_total_count, 4,             0
+
+INST_LOST_BREAK_DONT_count, 4,             0
+INST_LOST_BREAK_DONT_total_count, 4,             0
+
+INST_LOST_BREAK_FT_UNAVAILABLE_count, 4,        255503
+INST_LOST_BREAK_FT_UNAVAILABLE_total_count, 4,        800812
+
+INST_LOST_BREAK_ICACHE_STAGE_RESTEER_count, 4,          8279
+INST_LOST_BREAK_ICACHE_STAGE_RESTEER_total_count, 4,         24869
+
+INST_LOST_BREAK_ICACHE_MISS_REQ_SUCCESS_count, 4,         45243
+INST_LOST_BREAK_ICACHE_MISS_REQ_SUCCESS_total_count, 4,        145919
+
+INST_LOST_BREAK_ICACHE_MISS_REQ_FAILURE_count, 4,             0
+INST_LOST_BREAK_ICACHE_MISS_REQ_FAILURE_total_count, 4,         34024
+
+INST_LOST_BREAK_ICACHE_WAIT_FOR_MISS_count, 4,        301176
+INST_LOST_BREAK_ICACHE_WAIT_FOR_MISS_total_count, 4,       1625764
+
+INST_LOST_BREAK_ICACHE_STALLED_count, 4,        102208
+INST_LOST_BREAK_ICACHE_STALLED_total_count, 4,        300017
+
+INST_LOST_BREAK_ICACHE_TO_UOP_CACHE_SWITCH_count, 4,         61219
+INST_LOST_BREAK_ICACHE_TO_UOP_CACHE_SWITCH_total_count, 4,        192174
+
+INST_LOST_BREAK_ICACHE_READ_LIMIT_count, 4,        174213
+INST_LOST_BREAK_ICACHE_READ_LIMIT_total_count, 4,        529488
+
+INST_LOST_BREAK_ICACHE_ISSUE_WIDTH_count, 4,             0
+INST_LOST_BREAK_ICACHE_ISSUE_WIDTH_total_count, 4,             0
+
+INST_LOST_BREAK_UOP_CACHE_STALLED_count, 4,       3506566
+INST_LOST_BREAK_UOP_CACHE_STALLED_total_count, 4,      10358851
+
+INST_LOST_BREAK_UOP_CACHE_TO_ICACHE_SWITCH_count, 4,         74216
+INST_LOST_BREAK_UOP_CACHE_TO_ICACHE_SWITCH_total_count, 4,        235224
+
+INST_LOST_BREAK_UOP_CACHE_READ_LIMIT_count, 4,       1952171
+INST_LOST_BREAK_UOP_CACHE_READ_LIMIT_total_count, 4,       5917535
+
+INST_LOST_BREAK_UOP_CACHE_ISSUE_WIDTH_count, 4,             0
+INST_LOST_BREAK_UOP_CACHE_ISSUE_WIDTH_total_count, 4,             0
+
+INST_LOST_TOTAL_count, 0,      39840824
+INST_LOST_TOTAL_total_count, 0,     121228954
+
+INST_LOST_WAIT_FOR_ICACHE_MISS_NOT_PREFETCHED_count, 5,             0
+INST_LOST_WAIT_FOR_ICACHE_MISS_NOT_PREFETCHED_total_count, 5,        158850
+
+INST_LOST_WAIT_FOR_ICACHE_MISS_PREFETCHED_AND_EVICTED_BY_IFETCH_count, 5,             0
+INST_LOST_WAIT_FOR_ICACHE_MISS_PREFETCHED_AND_EVICTED_BY_IFETCH_total_count, 5,             0
+
+INST_LOST_WAIT_FOR_ICACHE_MISS_PREFETCHED_AND_EVICTED_BY_FDIP_count, 5,             0
+INST_LOST_WAIT_FOR_ICACHE_MISS_PREFETCHED_AND_EVICTED_BY_FDIP_total_count, 5,             0
+
+INST_LOST_WAIT_FOR_ICACHE_MISS_MSHR_HIT_PREF_OFFPATH_count, 5,          2094
+INST_LOST_WAIT_FOR_ICACHE_MISS_MSHR_HIT_PREF_OFFPATH_total_count, 5,          6978
+
+INST_LOST_WAIT_FOR_ICACHE_MISS_MSHR_HIT_PREF_ONPATH_count, 5,        286866
+INST_LOST_WAIT_FOR_ICACHE_MISS_MSHR_HIT_PREF_ONPATH_total_count, 5,       1350636
+
+FETCH_0_OPS_count, 6,         97472
+FETCH_0_OPS_total_count, 6,        424803
+
+FETCH_1_OPS_count, 6,         34213
+FETCH_1_OPS_total_count, 6,        106035
+
+FETCH_2_OPS_count, 6,         41375
+FETCH_2_OPS_total_count, 6,        129366
+
+FETCH_3_OPS_count, 6,         45507
+FETCH_3_OPS_total_count, 6,        147502
+
+FETCH_4_OPS_count, 6,       1308551
+FETCH_4_OPS_total_count, 6,       3871293
+
+FETCH_5_OPS_count, 6,         47185
+FETCH_5_OPS_total_count, 6,        153358
+
+FETCH_6_OPS_count, 6,        401068
+FETCH_6_OPS_total_count, 6,       1234885
+
+FETCH_7_OPS_count, 6,         15111
+FETCH_7_OPS_total_count, 6,         49044
+
+FETCH_8_OPS_count, 6,       3140529
+FETCH_8_OPS_total_count, 6,       9531553
+
+FETCH_9_OPS_count, 6,             0
+FETCH_9_OPS_total_count, 6,             0
+
+FETCH_10_OPS_count, 6,             0
+FETCH_10_OPS_total_count, 6,             0
+
+FETCH_11_OPS_count, 6,             0
+FETCH_11_OPS_total_count, 6,             0
+
+FETCH_12_OPS_count, 6,             0
+FETCH_12_OPS_total_count, 6,             0
+
+FETCH_13_OPS_count, 6,             0
+FETCH_13_OPS_total_count, 6,             0
+
+FETCH_14_OPS_count, 6,             0
+FETCH_14_OPS_total_count, 6,             0
+
+FETCH_15_OPS_count, 6,             0
+FETCH_15_OPS_total_count, 6,             0
+
+FETCH_16_OPS_count, 6,             0
+FETCH_16_OPS_total_count, 6,             0
+
+ST_BREAK_DONT_count, 7,             0
+ST_BREAK_DONT_total_count, 7,             0
+
+ST_BREAK_FT_UNAVAILABLE_count, 7,         43253
+ST_BREAK_FT_UNAVAILABLE_total_count, 7,        135209
+
+ST_BREAK_ICACHE_STAGE_RESTEER_count, 7,          2149
+ST_BREAK_ICACHE_STAGE_RESTEER_total_count, 7,          6814
+
+ST_BREAK_ICACHE_MISS_REQ_SUCCESS_count, 7,          9910
+ST_BREAK_ICACHE_MISS_REQ_SUCCESS_total_count, 7,         32151
+
+ST_BREAK_ICACHE_MISS_REQ_FAILURE_count, 7,             0
+ST_BREAK_ICACHE_MISS_REQ_FAILURE_total_count, 7,          5713
+
+ST_BREAK_ICACHE_WAIT_FOR_MISS_count, 7,         50204
+ST_BREAK_ICACHE_WAIT_FOR_MISS_total_count, 7,        270992
+
+ST_BREAK_ICACHE_STALLED_count, 7,        179193
+ST_BREAK_ICACHE_STALLED_total_count, 7,        533445
+
+ST_BREAK_ICACHE_TO_UOP_CACHE_SWITCH_count, 7,         18277
+ST_BREAK_ICACHE_TO_UOP_CACHE_SWITCH_total_count, 7,         57372
+
+ST_BREAK_ICACHE_READ_LIMIT_count, 7,         63124
+ST_BREAK_ICACHE_READ_LIMIT_total_count, 7,        192078
+
+ST_BREAK_ICACHE_ISSUE_WIDTH_count, 7,        238485
+ST_BREAK_ICACHE_ISSUE_WIDTH_total_count, 7,        745886
+
+ST_BREAK_UOP_CACHE_STALLED_count, 7,       2897852
+ST_BREAK_UOP_CACHE_STALLED_total_count, 7,       8753991
+
+ST_BREAK_UOP_CACHE_TO_ICACHE_SWITCH_count, 7,         16377
+ST_BREAK_UOP_CACHE_TO_ICACHE_SWITCH_total_count, 7,         51649
+
+ST_BREAK_UOP_CACHE_READ_LIMIT_count, 7,        491644
+ST_BREAK_UOP_CACHE_READ_LIMIT_total_count, 7,       1490541
+
+ST_BREAK_UOP_CACHE_ISSUE_WIDTH_count, 7,       1120543
+ST_BREAK_UOP_CACHE_ISSUE_WIDTH_total_count, 7,       3371998
+
+ORACLE_ON_PATH_INST_count, 8,      11913509
+ORACLE_ON_PATH_INST_total_count, 8,      35714366
+
+ORACLE_OFF_PATH_INST_count, 8,        791918
+ORACLE_OFF_PATH_INST_total_count, 8,       2761903
+
+ORACLE_ON_PATH_INST_MEM_count, 9,       4278304
+ORACLE_ON_PATH_INST_MEM_total_count, 9,      12821944
+
+ORACLE_ON_PATH_INST_NOTMEM_count, 9,       7635205
+ORACLE_ON_PATH_INST_NOTMEM_total_count, 9,      22892422
+
+ORACLE_OFF_PATH_INST_MEM_count, 9,        317279
+ORACLE_OFF_PATH_INST_MEM_total_count, 9,       1028531
+
+ORACLE_OFF_PATH_INST_NOTMEM_count, 9,        474639
+ORACLE_OFF_PATH_INST_NOTMEM_total_count, 9,       1733372
+
+ICACHE_CYCLE_NONRA_ONPATH_count, 10,             0
+ICACHE_CYCLE_NONRA_ONPATH_total_count, 10,             0
+
+ICACHE_CYCLE_NONRA_OFFPATH_count, 10,             0
+ICACHE_CYCLE_NONRA_OFFPATH_total_count, 10,             0
+
+ICACHE_CYCLE_RA_ONPATH_count, 10,             0
+ICACHE_CYCLE_RA_ONPATH_total_count, 10,             0
+
+ICACHE_CYCLE_RA_OFFPATH_count, 10,             0
+ICACHE_CYCLE_RA_OFFPATH_total_count, 10,             0
+
+ICACHE_CYCLE_ONPATH_NONRA_count, 11,             0
+ICACHE_CYCLE_ONPATH_NONRA_total_count, 11,             0
+
+ICACHE_CYCLE_OFFPATH_NONRA_count, 11,             0
+ICACHE_CYCLE_OFFPATH_NONRA_total_count, 11,             0
+
+ICACHE_CYCLE_ONPATH_RA_count, 12,             0
+ICACHE_CYCLE_ONPATH_RA_total_count, 12,             0
+
+ICACHE_CYCLE_OFFPATH_RA_count, 12,             0
+ICACHE_CYCLE_OFFPATH_RA_total_count, 12,             0
+
+INACCURATE_OFFPATH_CYCLES_count, 0,             0
+INACCURATE_OFFPATH_CYCLES_pct, 0,        0.000
+INACCURATE_OFFPATH_CYCLES_total_count, 0,             0
+INACCURATE_OFFPATH_CYCLES_total_pct, 0,        0.000
+
+FETCH_ALL_INST_count, 0,      12705427
+FETCH_ALL_INST_total_count, 0,      38476269
+
+EXEC_ALL_INST_count, 0,      11978463
+EXEC_ALL_INST_total_count, 0,      35963353
+
+RET_ALL_INST_count, 0,      11914109
+RET_ALL_INST_total_count, 0,      35714366
+
+EXEC_ON_PATH_INST_count, 13,      11913992
+EXEC_ON_PATH_INST_total_count, 13,      35714366
+
+EXEC_OFF_PATH_INST_count, 13,         64471
+EXEC_OFF_PATH_INST_total_count, 13,        248987
+
+EXEC_ON_PATH_INST_MEM_count, 14,       4278479
+EXEC_ON_PATH_INST_MEM_total_count, 14,      12821944
+
+EXEC_ON_PATH_INST_NOTMEM_count, 14,       7635513
+EXEC_ON_PATH_INST_NOTMEM_total_count, 14,      22892422
+
+EXEC_OFF_PATH_INST_MEM_count, 14,         14123
+EXEC_OFF_PATH_INST_MEM_total_count, 14,         47941
+
+EXEC_OFF_PATH_INST_NOTMEM_count, 14,         50348
+EXEC_OFF_PATH_INST_NOTMEM_total_count, 14,        201046
+
+EXEC_RA_INST_count, 15,             0
+EXEC_RA_INST_total_count, 15,             0
+
+EXEC_NONRA_INST_count, 15,             0
+EXEC_NONRA_INST_total_count, 15,             0
+
+EXEC_ON_PATH_INST_RA_count, 16,             0
+EXEC_ON_PATH_INST_RA_total_count, 16,             0
+
+EXEC_OFF_PATH_INST_RA_count, 16,             0
+EXEC_OFF_PATH_INST_RA_total_count, 16,             0
+
+EXEC_ON_PATH_INST_NONRA_count, 17,             0
+EXEC_ON_PATH_INST_NONRA_total_count, 17,             0
+
+EXEC_OFF_PATH_INST_NONRA_count, 17,             0
+EXEC_OFF_PATH_INST_NONRA_total_count, 17,             0
+
+EXEC_RA_ON_PATH_INST_count, 18,             0
+EXEC_RA_ON_PATH_INST_total_count, 18,             0
+
+EXEC_RA_OFF_PATH_INST_count, 18,             0
+EXEC_RA_OFF_PATH_INST_total_count, 18,             0
+
+EXEC_NONRA_ON_PATH_INST_count, 18,             0
+EXEC_NONRA_ON_PATH_INST_total_count, 18,             0
+
+EXEC_NONRA_OFF_PATH_INST_count, 18,             0
+EXEC_NONRA_OFF_PATH_INST_total_count, 18,             0
+
+ICACHE_THROTTLE_CYCLE_count, 0,             0
+ICACHE_THROTTLE_CYCLE_total_count, 0,             0
+
+FETCH_ENABLE_THROTTLE_OFF_PATH_count, 19,             0
+FETCH_ENABLE_THROTTLE_OFF_PATH_total_count, 19,             0
+
+FETCH_ENABLE_THROTTLE_ON_PATH_count, 19,             0
+FETCH_ENABLE_THROTTLE_ON_PATH_total_count, 19,             0
+
+FETCH_DISABLE_THROTTLE_OFF_PATH_count, 20,             0
+FETCH_DISABLE_THROTTLE_OFF_PATH_total_count, 20,             0
+
+FETCH_DISABLE_THROTTLE_ON_PATH_count, 20,             0
+FETCH_DISABLE_THROTTLE_ON_PATH_total_count, 20,             0
+
+FETCH_TH_ADJUST__0_count, 21,             0
+FETCH_TH_ADJUST__0_total_count, 21,             0
+
+FETCH_TH_ADJUST__1_count, 21,             0
+FETCH_TH_ADJUST__1_total_count, 21,             0
+
+FETCH_TH_ADJUST__2_count, 21,             0
+FETCH_TH_ADJUST__2_total_count, 21,             0
+
+FETCH_TH_ADJUST__3_count, 21,             0
+FETCH_TH_ADJUST__3_total_count, 21,             0
+
+FETCH_TH_ADJUST__4_count, 21,             0
+FETCH_TH_ADJUST__4_total_count, 21,             0
+
+FETCH_TH_ADJUST__5_count, 21,             0
+FETCH_TH_ADJUST__5_total_count, 21,             0
+
+FETCH_TH_ADJUST__6_count, 21,             0
+FETCH_TH_ADJUST__6_total_count, 21,             0
+
+FETCH_TH_ADJUST__7_count, 21,             0
+FETCH_TH_ADJUST__7_total_count, 21,             0
+
+FETCH_TH_ADJUST__8_count, 21,             0
+FETCH_TH_ADJUST__8_total_count, 21,             0
+
+FETCH_TH_ADJUST__9_count, 21,             0
+FETCH_TH_ADJUST__9_total_count, 21,             0
+
+FETCH_TH_ADJUST__MAX_count, 21,             0
+FETCH_TH_ADJUST__MAX_total_count, 21,             0
+
+FETCH_TH_ADJUST_UP_count, 22,             0
+FETCH_TH_ADJUST_UP_total_count, 22,             0
+
+FETCH_TH_ADJUST_DOWN_count, 22,             0
+FETCH_TH_ADJUST_DOWN_total_count, 22,             0
+
+FETCH_TH_ADJUST_SAME_count, 22,             0
+FETCH_TH_ADJUST_SAME_total_count, 22,             0
+
+THROTTLE_ADJUST_CACHE_MISS_INFO_count, 0,             0
+THROTTLE_ADJUST_CACHE_MISS_INFO_total_count, 0,             0
+
+LOW_CONF_COUNT_BP_MIS_0_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_0_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_1_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_1_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_2_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_2_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_3_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_3_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_4_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_4_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_5_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_5_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_6_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_6_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_7_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_7_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_8_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_8_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_9_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_9_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_10_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_10_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_11_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_11_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_12_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_12_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_13_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_13_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_14_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_14_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_15_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_15_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_16_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_16_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_17_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_17_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_18_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_18_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_19_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_19_total_count, 23,             0
+
+LOW_CONF_COUNT_BP_MIS_20_count, 23,             0
+LOW_CONF_COUNT_BP_MIS_20_total_count, 23,             0
+
+LOW_CONF_COUNT_RET_0_count, 24,             0
+LOW_CONF_COUNT_RET_0_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_1_count, 24,             0
+LOW_CONF_COUNT_RET_1_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_2_count, 24,             0
+LOW_CONF_COUNT_RET_2_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_3_count, 24,             0
+LOW_CONF_COUNT_RET_3_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_4_count, 24,             0
+LOW_CONF_COUNT_RET_4_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_5_count, 24,             0
+LOW_CONF_COUNT_RET_5_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_6_count, 24,             0
+LOW_CONF_COUNT_RET_6_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_7_count, 24,             0
+LOW_CONF_COUNT_RET_7_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_8_count, 24,             0
+LOW_CONF_COUNT_RET_8_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_9_count, 24,             0
+LOW_CONF_COUNT_RET_9_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_10_count, 24,             0
+LOW_CONF_COUNT_RET_10_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_11_count, 24,             0
+LOW_CONF_COUNT_RET_11_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_12_count, 24,             0
+LOW_CONF_COUNT_RET_12_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_13_count, 24,             0
+LOW_CONF_COUNT_RET_13_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_14_count, 24,             0
+LOW_CONF_COUNT_RET_14_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_15_count, 24,             0
+LOW_CONF_COUNT_RET_15_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_16_count, 24,             0
+LOW_CONF_COUNT_RET_16_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_17_count, 24,             0
+LOW_CONF_COUNT_RET_17_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_18_count, 24,             0
+LOW_CONF_COUNT_RET_18_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_19_count, 24,             0
+LOW_CONF_COUNT_RET_19_total_count, 24,             0
+
+LOW_CONF_COUNT_RET_20_count, 24,             0
+LOW_CONF_COUNT_RET_20_total_count, 24,             0
+
+CYCLES_RESTEER_RECOVER_AT_EXEC_count, 25,             0
+CYCLES_RESTEER_RECOVER_AT_EXEC_total_count, 25,             0
+
+CYCLES_RESTEER_RECOVER_AT_DECODE_count, 25,             0
+CYCLES_RESTEER_RECOVER_AT_DECODE_total_count, 25,             0
+
+CYCLES_RESTEER_BTB_MISS_count, 25,             0
+CYCLES_RESTEER_BTB_MISS_total_count, 25,             0
+
+CYCLES_RESTEER_RECOVER_AT_EXEC_SAVED_UC_FETCH_count, 26,             0
+CYCLES_RESTEER_RECOVER_AT_EXEC_SAVED_UC_FETCH_total_count, 26,             0
+
+CYCLES_RESTEER_RECOVER_AT_EXEC_COULD_BE_SAVED_UC_FETCH_count, 26,             0
+CYCLES_RESTEER_RECOVER_AT_EXEC_COULD_BE_SAVED_UC_FETCH_total_count, 26,             0
+
+CYCLES_RESTEER_RECOVER_AT_DECODE_SAVED_UC_FETCH_count, 26,             0
+CYCLES_RESTEER_RECOVER_AT_DECODE_SAVED_UC_FETCH_total_count, 26,             0
+
+CYCLES_RESTEER_RECOVER_AT_DECODE_COULD_BE_SAVED_UC_FETCH_count, 26,             0
+CYCLES_RESTEER_RECOVER_AT_DECODE_COULD_BE_SAVED_UC_FETCH_total_count, 26,             0
+
+CYCLES_RESTEER_BTB_MISS_SAVED_UC_FETCH_count, 26,             0
+CYCLES_RESTEER_BTB_MISS_SAVED_UC_FETCH_total_count, 26,             0
+
+CYCLES_RESTEER_BTB_MISS_COULD_BE_SAVED_UC_FETCH_count, 26,             0
+CYCLES_RESTEER_BTB_MISS_COULD_BE_SAVED_UC_FETCH_total_count, 26,             0
+
+CYCLES_UOC_IC_SWITCH_count, 0,             0
+CYCLES_UOC_IC_SWITCH_total_count, 0,             0
+
+
+
