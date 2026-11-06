@@ -19,8 +19,8 @@ exactly on all 40 simpoints, so it is used as the baseline here.
   only pass 2 (`ideal_pass2`); pass 2 overwrote pass 1's collection.
 - `plot_ipc_gain.py` → `ipc_gain.{png,pdf,csv}`: weighted IPC gain per application.
   Weighted IPC is scarab-infra's `IPC` row, sum(w * instructions) / sum(w * cycles)
-  over the measured windows with SimPoint weights. Geomean is over applications.
+  over the measured windows with SimPoint weights. Average is the arithmetic mean over applications.
 
 | | RFP | I-Fuse | Ideal fusion |
 |---|---|---|---|
-| Geomean weighted IPC gain | +0.8% | +9.8% | +15.6% |
+| Average weighted IPC gain | +0.8% | +10.0% | +15.8% |

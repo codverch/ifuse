@@ -4,7 +4,7 @@
 IPC per application is scarab-infra's own `IPC` row in collected_stats.csv:
 sum(w * Periodic_Instructions) / sum(w * Periodic_Cycles) over the
 application's simpoints (measured 10M windows only, SimPoint weights).
-Gain = IPC_config / IPC_baseline - 1. The last group is the geomean of the
+Gain = IPC_config / IPC_baseline - 1. The last group is the arithmetic mean of the
 per-application IPC ratios.
 
 Baseline IPC comes from the `nofuse` configuration of the I-Fuse experiment,
@@ -63,12 +63,12 @@ def main():
     for label, path, cfg, _ in SERIES:
         ipc = weighted_ipc(path, cfg)
         ratio = np.array([ipc[a] / base[a] for a in apps])
-        geo = float(np.exp(np.log(ratio).mean()))
+        geo = float(ratio.mean())  # arithmetic mean of per-app gains
         g = np.append(ratio, geo) * 100 - 100
         gains.append(g)
         table.append((label, g))
 
-    names = [a.replace("_", "\n").replace("cachebench", "cache\nbench").replace("clickhouse", "click\nhouse") for a in apps] + ["Geomean"]
+    names = [a.replace("_", "\n").replace("cachebench", "cache\nbench").replace("clickhouse", "click\nhouse") for a in apps] + ["Average"]
     x = np.arange(len(names), dtype=float)
     x[-1] += 0.5                       # separate the geomean group
     w = 0.26
@@ -110,7 +110,7 @@ def main():
         wr.writerow(["app", "baseline_ipc"] + [s[0] + "_gain_pct" for s in SERIES])
         for j, a in enumerate(apps):
             wr.writerow([a, f"{base[a]:.4f}"] + [f"{g[j]:.2f}" for _, g in table])
-        wr.writerow(["geomean", ""] + [f"{g[-1]:.2f}" for _, g in table])
+        wr.writerow(["average", ""] + [f"{g[-1]:.2f}" for _, g in table])
     print(open(HERE / "ipc_gain.csv").read())
 
 
