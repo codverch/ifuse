@@ -178,6 +178,11 @@ struct Mem_Req_struct {
   Flag wb_used_onpath;                       /* is this a writeback that was used onpath? */
   Addr loadPC;                               /* load PC of the oldest load requesting this address */
   uns8 prefetcher_id;                        /* which Prefetcher sent this prefetch */
+  Flag rfp_prefetch;                         /* is this a RFP prefetch? */
+  uns16 rfp_prfid;                           /* physical register ID (prfid) */  
+  Addr rfp_predicted_va;                     /* predicted virtual address */
+  Counter rfp_launch_cycle;                  /* RFP launch cycle (PRF model) */
+  Counter rfp_owner_unique;                  /* unique number of the operation that owns this PRF entry */
 
   uns pref_distance; /* prefetch distance (currently works for pref_stream only)
                       */

@@ -49,6 +49,7 @@
 #include "ft.h"
 #include "map.h"
 #include "map_rename.h"
+#include "prefetcher/rfp.h"
 #include "model.h"
 #include "op_pool.h"
 #include "statistics.h"
@@ -191,6 +192,8 @@ void debug_map_stage() {
 /* map_cycle: */
 
 void update_map_stage(Stage_Data* src_sd) {
+  reg_file_collect_utilization_stat();
+
   /* stall if the renaming table is full */
   if (!reg_file_available(STAGE_MAX_OP_COUNT)) {
     map->reg_file_stall = TRUE;
@@ -261,6 +264,9 @@ static inline void stage_process_op(Op* op) {
 
   /* register renaming allocation */
   reg_file_rename(op);
+
+  /* RFP: prediction at icache fetch; prefetch launch at rename */
+  rfp_prefetch_launch(op);
 
   /* setting wake up lists */
   add_to_wake_up_lists(op, model->wake_hook);

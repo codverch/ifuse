@@ -1,0 +1,26 @@
+/* Register File Prefetch (RFP) parameters, included from src/param_files.def.
+ * The order matches hpca2027-rfp so PARAMS.out diffs cleanly against old runs. */
+
+/* on by default, so a baseline must pass --rfp_on 0 */
+DEF_PARAM(rfp_on, RFP_ON, Flag, Flag, TRUE, )
+/* ignored; kept so old command lines parse */
+DEF_PARAM(rfp_model, RFP_MODEL, uns, uns, 1, )
+/* RFP FIFO entries, separate from the demand load queue */
+DEF_PARAM(rfp_lsq_fifo_size, RFP_LSQ_FIFO_SIZE, uns, uns, 64, )
+/* Ignored; kept so old command lines parse. An L1-missing prefetch is always
+ * dropped: the old path that sent it to memory deadlocked Scarab's shared
+ * request-buffer pool on write-heavy traces. */
+DEF_PARAM(rfp_drop_on_l1_miss, RFP_DROP_ON_L1_MISS, Flag, Flag, TRUE, )
+DEF_PARAM(rfp_mem_buf_reserve, RFP_MEM_BUF_RESERVE, uns, uns, 4, )
+/* PT and PAT geometry; sets must be powers of two */
+DEF_PARAM(rfp_pt_num_sets, RFP_PT_NUM_SETS, uns, uns, 128, )
+DEF_PARAM(rfp_pt_num_ways, RFP_PT_NUM_WAYS, uns, uns, 8, )
+DEF_PARAM(rfp_pat_num_sets, RFP_PAT_NUM_SETS, uns, uns, 16, )
+DEF_PARAM(rfp_pat_num_ways, RFP_PAT_NUM_WAYS, uns, uns, 4, )
+/* a confirmed stride raises confidence with probability 1/2^rfp_prob_shift */
+DEF_PARAM(rfp_prob_shift, RFP_PROB_SHIFT, uns, uns, 4, )
+/* confidence needed to predict */
+DEF_PARAM(rfp_conf_max, RFP_CONF_MAX, uns, uns, 1, )
+/* width of the PT stride field; signed means two's complement */
+DEF_PARAM(rfp_stride_bits, RFP_STRIDE_BITS, uns, uns, 5, )
+DEF_PARAM(rfp_stride_signed, RFP_STRIDE_SIGNED, Flag, Flag, TRUE, )

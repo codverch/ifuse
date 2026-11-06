@@ -45,6 +45,7 @@ extern "C" {
 #include "general.param.h"
 #include "memory/memory.param.h"
 #include "power/power.param.h"
+#include "prefetcher/rfp.param.h"
 #include "ramulator.param.h"
 
 #include "ramulator.h"
@@ -559,6 +560,40 @@ static void power_print_core_btb(std::ofstream& out, uint32_t core_id) {
   END_OF_COMPONENT(out, header);
 }
 
+/* ISCA'22 Table 1 compressed entry sizes (bytes), rounded up for CACTI SRAM modeling. */
+static constexpr int RFP_PT_ENTRY_BYTES = 8;
+static constexpr int RFP_PAT_ENTRY_BYTES = 8;
+
+static std::string rfp_sram_config_str(int num_sets, int num_ways, int entry_bytes) {
+  int capacity = num_sets * num_ways * entry_bytes;
+  return std::to_string(capacity) + "," + std::to_string(entry_bytes) + "," + std::to_string(num_ways) +
+         ",1,1,1";
+}
+
+static void power_print_core_rfp(std::ofstream& out, uint32_t core_id) {
+  if (!RFP_ON)
+    return;
+
+  std::string header = "\t\t";
+  ADD_XML_PARAM(out, "\t", "rfp_on", 1, "Enable RFP PT/PAT SRAM power modeling in McPAT");
+
+  ADD_XML_COMPONENT(out, header, "system.core" + std::to_string(core_id) + ".rfp_pt", "RFP_PT", );
+  ADD_XML_PARAM_str(out, header, "rfp_config",
+                    rfp_sram_config_str(RFP_PT_NUM_SETS, RFP_PT_NUM_WAYS, RFP_PT_ENTRY_BYTES),
+                    "capacity,block_width,associativity,bank,throughput,latency (ISCA'22 PT storage)");
+  ADD_XML_CORE_STAT(out, header, core_id, "read_accesses", POWER_RFP_PT_READ, );
+  ADD_XML_CORE_STAT(out, header, core_id, "write_accesses", POWER_RFP_PT_WRITE, );
+  END_OF_COMPONENT(out, header);
+
+  ADD_XML_COMPONENT(out, header, "system.core" + std::to_string(core_id) + ".rfp_pat", "RFP_PAT", );
+  ADD_XML_PARAM_str(out, header, "rfp_config",
+                    rfp_sram_config_str(RFP_PAT_NUM_SETS, RFP_PAT_NUM_WAYS, RFP_PAT_ENTRY_BYTES),
+                    "capacity,block_width,associativity,bank,throughput,latency (ISCA'22 PAT storage)");
+  ADD_XML_CORE_STAT(out, header, core_id, "read_accesses", POWER_RFP_PAT_READ, );
+  ADD_XML_CORE_STAT(out, header, core_id, "write_accesses", POWER_RFP_PAT_WRITE, );
+  END_OF_COMPONENT(out, header);
+}
+
 void power_print_core_params(std::ofstream& out, uint32_t core_id) {
   uns pipeline_depth = DECODE_CYCLES + MAP_CYCLES + 1 + 1 + 1 + 1;  // icache, node, exec, retire
 
@@ -587,6 +622,7 @@ void power_print_core_params(std::ofstream& out, uint32_t core_id) {
   power_print_core_dtlb(out, core_id);
   power_print_core_dcache(out, core_id);
   power_print_core_btb(out, core_id);
+  power_print_core_rfp(out, core_id);
 
   END_OF_COMPONENT(out, header);
 }

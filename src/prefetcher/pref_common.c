@@ -845,7 +845,7 @@ void pref_update_core(uns proc_id) {
               umlc_req_queue[q_index].line_addr);
 
       // now access the umlc
-      Pref_Req_Info info;
+      Pref_Req_Info info = {0};
 
       info.prefetcher_id = umlc_req_queue[q_index].prefetcher_id;
       info.distance = umlc_req_queue[q_index].distance;
@@ -885,7 +885,7 @@ void pref_update_core(uns proc_id) {
               ul1req_queue[q_index].line_addr);
 
       // now access the ul1
-      Pref_Req_Info info;
+      Pref_Req_Info info = {0};
 
       info.prefetcher_id = ul1req_queue[q_index].prefetcher_id;
       info.distance = ul1req_queue[q_index].distance;

@@ -57,6 +57,8 @@
 #include "prefetcher/fdip.h"
 #include "prefetcher/l2l1pref.h"
 #include "prefetcher/stream_pref.h"
+#include "prefetcher/rfp.h"
+#include "prefetcher/rfp.param.h"
 
 #include "cmp_model.h"
 #include "decode_stage.h"
@@ -931,6 +933,9 @@ static inline void icache_process_ops(Stage_Data* cur_data, Flag fetched_from_uo
       print_func_op(op);
       FATAL_ERROR(ic->proc_id, "Access to 0x0\n");
     }
+
+    /* RFP: PT lookup at fetch; prefetch launched at rename (map). */
+    rfp_predict_at_fetch(op);
 
     if (DUMP_TRACE && DEBUG_RANGE_COND(ic->proc_id))
       print_func_op(op);

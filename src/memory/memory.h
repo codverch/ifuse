@@ -212,6 +212,11 @@ typedef struct Pref_Req_Info_Struct {
   uns distance;
   Flag bw_limited;
   Destination dest;  // Only MLC/L2 values matter
+  Flag rfp_prefetch;  // Is this a RFP prefetch?
+  uns16 rfp_prfid;    // Physical dest reg for RFP writeback
+  Addr rfp_predicted_va;
+  Counter rfp_launch_cycle;  // Cycle when RFP prefetch launched (PRF model)
+  Counter rfp_owner_unique;
 } Pref_Req_Info;
 
 typedef enum L1_Dyn_Partition_Policy_enum {
@@ -238,6 +243,7 @@ void debug_memory(void);
 void update_memory(void);
 
 Flag scan_stores(Addr, uns);
+uns mem_num_free_req_buffers(void);
 void op_nuke_mem_req(Op*);
 L1_Data* do_l1_access(Op* op);
 L1_Data* do_l1_access_addr(Addr);
@@ -247,6 +253,7 @@ L1_Data* do_mlc_access_addr(Addr);
 Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay, Op* op, Flag done_func(Mem_Req*),
                  Counter unique_num, Pref_Req_Info*);
 void mem_free_req(Mem_Req* req);
+Flag mem_cancel_rfp_prefetch(uns8 proc_id, uns16 prfid, Counter launch_cycle, Counter owner_unique);
 void mem_complete_bus_in_access(Mem_Req* req, Counter priority);
 void print_req_buffer(void);
 void mem_destroy_req_pool(void);

@@ -61,6 +61,7 @@
 #include "map_rename.h"
 #include "op_pool.h"
 #include "sim.h"
+#include "prefetcher/rfp.h"
 #include "statistics.h"
 #include "thread.h"
 #include "xed-iclass-enum.h"
@@ -523,6 +524,63 @@ void node_retire() {
             unsstr64(uop_count[node->proc_id]), unsstr64(node->ret_op), unsstr64(op->op_num));
 
     node->ret_op++;
+
+    /* Train RFP table on committed load */
+    rfp_train_retire(op);
+
+    /* Accumulate on-path load latency (retire guarantees on-path here). */
+    if (op->uop->mem_type == MEM_LD && op_get_fetch_cycle(op) != MAX_CTR &&
+        op_get_exec_cycle(op) != MAX_CTR && op_get_done_cycle(op) != MAX_CTR) {
+      if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+        INC_STAT_EVENT(op->proc_id, LD_EXEC_MINUS_FETCH_LATENCY, op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+      }
+      if (cycle_count >= op_get_fetch_cycle(op)) {
+        INC_STAT_EVENT(op->proc_id, LD_RETIRE_MINUS_FETCH_LATENCY, cycle_count - op_get_fetch_cycle(op));
+      }
+      if (op_get_done_cycle(op) >= op_get_exec_cycle(op)) {
+        INC_STAT_EVENT(op->proc_id, LD_EXEC_TO_DONE_LATENCY, op_get_done_cycle(op) - op_get_exec_cycle(op));
+      }
+
+      if (RFP_ON) {
+        if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+          INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_MINUS_FETCH, op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+        }
+        if (cycle_count >= op_get_fetch_cycle(op)) {
+          INC_STAT_EVENT(op->proc_id, RFP_LD_RETIRE_MINUS_FETCH, cycle_count - op_get_fetch_cycle(op));
+        }
+        if (op_get_done_cycle(op) >= op_get_exec_cycle(op)) {
+          INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_TO_DONE, op_get_done_cycle(op) - op_get_exec_cycle(op));
+        }
+
+        if (op->rfp_served) {
+          if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_MINUS_FETCH_SERVED,
+                           op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+          }
+          if (cycle_count >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, RFP_LD_RETIRE_MINUS_FETCH_SERVED,
+                           cycle_count - op_get_fetch_cycle(op));
+          }
+          if (op_get_done_cycle(op) >= op_get_exec_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_TO_DONE_SERVED,
+                           op_get_done_cycle(op) - op_get_exec_cycle(op));
+          }
+        } else {
+          if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_MINUS_FETCH_DEMAND,
+                           op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+          }
+          if (cycle_count >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, RFP_LD_RETIRE_MINUS_FETCH_DEMAND,
+                           cycle_count - op_get_fetch_cycle(op));
+          }
+          if (op_get_done_cycle(op) >= op_get_exec_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, RFP_LD_EXEC_TO_DONE_DEMAND,
+                           op_get_done_cycle(op) - op_get_exec_cycle(op));
+          }
+        }
+      }
+    }
 
     STAT_EVENT(op->proc_id, RET_ALL_INST);
 

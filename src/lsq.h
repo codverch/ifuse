@@ -48,6 +48,20 @@ Flag lsq_available(Mem_Type mem_type);  // check if there is an available LSQ en
 void lsq_dispatch(Op* mem_op);          // insert mem op into LSQ when mem op is inserted into ROB
 void lsq_commit(Op* mem_op);            // free the entry when the mem op is retired
 
+typedef struct Lsq_Rfp_Req_struct {
+  Op* owner_op;
+  Counter owner_unique;
+  Counter owner_op_num;
+  Addr predicted_line_addr;
+  uns16 prfid;
+  Counter launch_cycle;
+} Lsq_Rfp_Req;
+
+Flag lsq_rfp_enqueue(uns8 proc_id, Op* owner_op, Addr predicted_line_addr, uns16 prfid, Counter launch_cycle);
+Flag lsq_rfp_peek(uns8 proc_id, Lsq_Rfp_Req* out_req);
+void lsq_rfp_pop(uns8 proc_id);
+Flag lsq_older_store_overlaps(uns8 proc_id, Counter younger_op_num, Addr addr, uns size);
+
 int lsq_get_in_flight_load_num();
 
 #ifdef __cplusplus

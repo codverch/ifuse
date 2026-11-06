@@ -45,6 +45,9 @@
 
 #include "ft.h"
 #include "op_pool.h"
+#include "prefetcher/rfp.h"
+#include "prefetcher/rfp_prf.h"
+#include "statistics.h"
 
 /**************************************************************************************/
 /* Macros */
@@ -111,6 +114,19 @@ void remove_from_seq_op_list(Thread_Data* td, Op* op) {
 /* recover_seq_op_list: */
 
 void recover_seq_op_list(Thread_Data* td, Counter op_num) {
+  /* Clear PRF state for all ops that will be squashed by this
+   * recovery, so stale prfid entries cannot be reused by younger ops. */
+  if (RFP_ON) {
+    Op** clear_op_p = (Op**)list_start_head_traversal(&td->seq_op_list);
+    for (; clear_op_p; clear_op_p = (Op**)list_next_element(&td->seq_op_list)) {
+      if ((*clear_op_p)->op_num > op_num) {
+        rfp_track_squash(*clear_op_p);
+        rfp_prf_clear_op(*clear_op_p);
+        STAT_EVENT((*clear_op_p)->proc_id, RFP_PRF_CLEARED_DUE_TO_RECOVERY);
+      }
+    }
+  }
+
   // Traverse the sequential op list and remove everything younger than the
   // recovering op
   Op** op_p = (Op**)list_start_head_traversal(&td->seq_op_list);

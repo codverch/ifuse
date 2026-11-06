@@ -261,6 +261,18 @@ struct Op_struct {
   uns16 dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];       // the reg id of allocated reg file entries
   uns16 prev_dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];  // the previous dst reg id with the same parent register id
   // }}}
+
+  // {{{ Register File Prefetch (RFP)
+  Flag rfp_predicted;              /* PT confident at rename; load is RFP-eligible */
+  Addr rfp_predicted_addr;         /* Predicted address from PT */
+  Counter rfp_launch_cycle;        /* Cycle when RFP prefetch request was launched, 0 if none */
+  uns16 rfp_prfid;                 /* Phys dest reg (prfid), set at rename launch */
+  Flag rfp_mispred_accounted;      /* Count wrong-address clear once per op */
+  Flag rfp_dropped_load_first;     /* Dropped prefetch request due to load reaching demand path first */
+  Flag rfp_served;                 /* Served from PRF; demand load was not issued */
+  Flag rfp_partial_mitigated;      /* Served but prefetch data not ready until after dispatch */
+  Flag rfp_pred_resolved;          /* Prediction outcome counted at dcache */
+  // }}}
   FT* parent_FT;
   FT* parent_FT_off_path;
 };

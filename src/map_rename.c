@@ -1817,6 +1817,38 @@ struct reg_renaming_scheme_func reg_renaming_scheme_func_table[REG_RENAMING_SCHE
 // clang-format on
 
 /**************************************************************************************/
+/* Register-file utilization diagnostics */
+
+void reg_file_collect_utilization_stat(void) {
+  Counter total_regs[REG_FILE_REG_TYPE_NUM] = {0};
+  Counter occupied_regs[REG_FILE_REG_TYPE_NUM] = {0};
+  Flag sampled = FALSE;
+
+  for (uns reg_type = 0; reg_type < REG_FILE_REG_TYPE_NUM; ++reg_type) {
+    if (!map_data->reg_file[reg_type])
+      continue;
+
+    struct reg_table *physical_table = map_data->reg_file[reg_type]->reg_table[REG_TABLE_TYPE_PHYSICAL];
+    if (!physical_table || !physical_table->free_list)
+      continue;
+
+    ASSERT(map_data->proc_id, physical_table->size >= physical_table->free_list->reg_free_num);
+    total_regs[reg_type] = physical_table->size;
+    occupied_regs[reg_type] = physical_table->size - physical_table->free_list->reg_free_num;
+    sampled = TRUE;
+  }
+
+  if (!sampled)
+    return;
+
+  STAT_EVENT(map_data->proc_id, REG_FILE_UTIL_SAMPLES);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_VECTOR]);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_VECTOR]);
+}
+
+/**************************************************************************************/
 /* External Calling */
 
 /*
