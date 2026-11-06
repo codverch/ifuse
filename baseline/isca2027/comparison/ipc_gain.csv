@@ -1,0 +1,13 @@
+app,baseline_ipc,RFP_gain_pct,I-Fuse_gain_pct,Ideal fusion_gain_pct
+appworld,1.1740,0.41,5.51,17.52
+bfs,2.6608,-1.83,8.84,11.24
+cachebench,1.4682,1.10,8.64,13.55
+clickhouse,1.9495,0.22,21.32,25.56
+core_bench,2.4217,1.11,18.35,34.22
+dfs,2.5983,-0.65,10.95,13.30
+duckdb,3.0071,1.49,2.58,7.08
+leveldb,1.9088,2.07,9.85,16.33
+memcached,1.3792,0.41,6.68,7.34
+pagerank,2.2683,-0.10,9.60,11.61
+terminal_bench,2.0899,4.55,7.14,16.21
+geomean,,0.79,9.83,15.58
