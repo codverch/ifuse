@@ -29,6 +29,8 @@
 
 #include "map_rename.h"
 
+#include "ideal-fusion/ideal_fusion.h"
+
 #include "globals/assert.h"
 #include "globals/global_defs.h"
 #include "globals/global_types.h"
@@ -489,6 +491,9 @@ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int r
 
 // mark the previous entry with same archituctural id before the committed one as dead and remove it
 static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_table_num) {
+  Flag skip_src_check = ideal_fusion_load2_is_nop(op);
+
+  if (!skip_src_check) {
   for (uns ii = 0; ii < op->uop->num_src_regs; ++ii) {
     int reg_type = reg_file_get_reg_type(op->src_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
     if (reg_type == REG_FILE_REG_TYPE_OTHER)
@@ -506,6 +511,7 @@ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_t
       ASSERT(op->proc_id, entry != NULL && entry->onpath_consumers_num > 0);
     }
   }
+  }
 
   for (uns ii = 0; ii < op->uop->num_dest_regs; ++ii) {
     int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
@@ -521,12 +527,14 @@ static inline void reg_file_release_prev(Op *op, int *reg_table_types, int reg_t
       struct reg_table *reg_table = map_data->reg_file[reg_type]->reg_table[table_type];
       struct reg_table_entry *entry = &reg_table->entries[reg_id];
       ASSERT(op->proc_id, entry != NULL);
-      ASSERT(op->proc_id, entry->reg_state == REG_TABLE_ENTRY_STATE_PRODUCED || REG_RENAMING_MOVE_ELIMINATE);
+      if (entry->reg_state != REG_TABLE_ENTRY_STATE_COMMIT) {
+        ASSERT(op->proc_id, entry->reg_state == REG_TABLE_ENTRY_STATE_PRODUCED || REG_RENAMING_MOVE_ELIMINATE);
 
-      // mark register as committed at retirement
-      ASSERT(op->proc_id,
-             reg_table->parent_reg_table->entries[entry->parent_reg_id].child_reg_id != REG_TABLE_REG_ID_INVALID);
-      entry->reg_state = REG_TABLE_ENTRY_STATE_COMMIT;
+        // mark register as committed at retirement
+        ASSERT(op->proc_id,
+               reg_table->parent_reg_table->entries[entry->parent_reg_id].child_reg_id != REG_TABLE_REG_ID_INVALID);
+        entry->reg_state = REG_TABLE_ENTRY_STATE_COMMIT;
+      }
 
       int prev_reg_id = op->prev_dst_reg_id[ii][table_type];
       ASSERT(op->proc_id, prev_reg_id != REG_TABLE_REG_ID_INVALID);
@@ -685,6 +693,9 @@ void reg_table_entry_read(struct reg_table_entry *entry, Op *op) {
   if (op->off_path)
     return;
 
+  if (ideal_fusion_load2_is_nop(op))
+    return;
+
   entry->onpath_consumers_num++;
   entry->lastuse_op_num = op->op_num;
   entry->lastuse_committed = FALSE;
@@ -744,6 +755,10 @@ void reg_table_entry_consume(struct reg_table_entry *entry, Op *op) {
 /* update the register state to indicate the value is produced during execution*/
 void reg_table_entry_produce(struct reg_table_entry *entry, Op *op, uns dst_reg_idx) {
   if (op->move_eliminated) {
+    return;
+  }
+  if (entry->reg_state == REG_TABLE_ENTRY_STATE_PRODUCED ||
+      entry->reg_state == REG_TABLE_ENTRY_STATE_COMMIT) {
     return;
   }
   ASSERT(map_data->proc_id, entry->reg_state == REG_TABLE_ENTRY_STATE_ALLOC);
@@ -1815,6 +1830,38 @@ struct reg_renaming_scheme_func reg_renaming_scheme_func_table[REG_RENAMING_SCHE
   },
 };
 // clang-format on
+
+/**************************************************************************************/
+/* Register-file utilization diagnostics */
+
+void reg_file_collect_utilization_stat(void) {
+  Counter total_regs[REG_FILE_REG_TYPE_NUM] = {0};
+  Counter occupied_regs[REG_FILE_REG_TYPE_NUM] = {0};
+  Flag sampled = FALSE;
+
+  for (uns reg_type = 0; reg_type < REG_FILE_REG_TYPE_NUM; ++reg_type) {
+    if (!map_data->reg_file[reg_type])
+      continue;
+
+    struct reg_table *physical_table = map_data->reg_file[reg_type]->reg_table[REG_TABLE_TYPE_PHYSICAL];
+    if (!physical_table || !physical_table->free_list)
+      continue;
+
+    ASSERT(map_data->proc_id, physical_table->size >= physical_table->free_list->reg_free_num);
+    total_regs[reg_type] = physical_table->size;
+    occupied_regs[reg_type] = physical_table->size - physical_table->free_list->reg_free_num;
+    sampled = TRUE;
+  }
+
+  if (!sampled)
+    return;
+
+  STAT_EVENT(map_data->proc_id, REG_FILE_UTIL_SAMPLES);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_PHYS_REGS_SUM, total_regs[REG_FILE_REG_TYPE_VECTOR]);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_INT_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_GENERAL_PURPOSE]);
+  INC_STAT_EVENT(map_data->proc_id, REG_FILE_VEC_OCCUPIED_SUM, occupied_regs[REG_FILE_REG_TYPE_VECTOR]);
+}
 
 /**************************************************************************************/
 /* External Calling */

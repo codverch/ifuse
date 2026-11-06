@@ -47,6 +47,7 @@
 #include "bp/bp.h"
 
 #include "ft.h"
+#include "ideal-fusion/ideal_fusion.h"
 #include "map.h"
 #include "map_rename.h"
 #include "model.h"
@@ -191,6 +192,8 @@ void debug_map_stage() {
 /* map_cycle: */
 
 void update_map_stage(Stage_Data* src_sd) {
+  reg_file_collect_utilization_stat();
+
   /* stall if the renaming table is full */
   if (!reg_file_available(STAGE_MAX_OP_COUNT)) {
     map->reg_file_stall = TRUE;
@@ -264,6 +267,9 @@ static inline void stage_process_op(Op* op) {
 
   /* setting wake up lists */
   add_to_wake_up_lists(op, model->wake_hook);
+
+  /* Ideal-fusion Load2 buffer coordination (after wake-up lists exist). */
+  ideal_fusion_on_map(op, model->wake_hook);
 }
 
 static inline void map_stage_collect_stat(Flag stall, Flag starved) {

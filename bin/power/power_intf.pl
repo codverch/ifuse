@@ -60,7 +60,7 @@ if (!(defined $file_tag)) {
   $file_tag = "";
 }
 
-my $model_results_filename = "$dir/$file_tag"."power_model_results.out";
+my $model_results_filename = "$dir/$file_tag"."power_model_results";
 my $mcpat_design_filename = "$dir/$file_tag"."design.out";
 
 die "PARAMS file not found: $dir/$file_tag"."PARAMS.out\n" unless -r "$dir/$file_tag"."PARAMS.out" || -r "$dir/$file_tag"."PARAMS.out.gz";
@@ -329,9 +329,9 @@ sub get_params($@) {
         $filter_hash{$filter} = 1;
     }
 
+    my @param_files = grep { -f $_ } glob("$dir/${file_tag}PARAMS.out $dir/${file_tag}PARAMS.out.gz");
     my $cmd = "";
-    for my $file (`ls $dir/${file_tag}PARAMS.*{out,out.gz} 2> /dev/null`) {
-        chomp $file;
+    for my $file (@param_files) {
         $cmd .= ($file =~ /gz$/ ? "zcat" : "cat")." $file ; ";
     }
 
@@ -383,9 +383,10 @@ sub traverse_stats($$$$$) {
     my $func = shift;
     my $power_intf = shift;
 
-    my @files = $power_intf ?
-        `ls $dir/${file_tag}*.stat.*{out,out.gz} 2> /dev/null` :
-        `ls $dir/${file_tag}*.stat.*{out,out.gz} 2> /dev/null | grep -v scarab_power`;
+    my @files = grep { -f $_ } glob("$dir/${file_tag}*.stat.*.out $dir/${file_tag}*.stat.*.out.gz");
+    if (!$power_intf) {
+        @files = grep { $_ !~ /scarab_power/ } @files;
+    }
 
     for my $file (@files) {
         chomp $file;

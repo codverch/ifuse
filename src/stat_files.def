@@ -33,8 +33,8 @@
 #include "memory/memory.stat.def"
 #include "core.stat.def"
 #include "inst.stat.def"
+#include "ideal-fusion/ideal_fusion.stat.def"
 #include "prefetcher/stream.stat.def"
 #include "prefetcher/l2l1pref.stat.def" 
 #include "power/power.stat.def"
 #include "prefetcher/pref.stat.def"
-

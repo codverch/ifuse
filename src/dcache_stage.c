@@ -312,6 +312,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
     else
       STAT_EVENT(op->proc_id, POWER_DCACHE_READ_ACCESS);
 
+    // count every demand access issued to the L1-D (hit or miss); gate on path
+    if (!op->off_path)
+      STAT_EVENT(op->proc_id, DCACHE_ACCESS_ONPATH);
+    else
+      STAT_EVENT(op->proc_id, DCACHE_ACCESS_OFFPATH);
+
     // if the data hits dc_pref_cache then insert to the dcache immediately
     if (DC_PREF_CACHE_ENABLE && !line) {
       line = dc_pref_cache_access(op);

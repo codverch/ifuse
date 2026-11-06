@@ -105,6 +105,13 @@ typedef struct Op_Cycles_struct {
 DECLARE_ENUM(Op_State, OP_STATE_LIST, OS_);
 // clang-format on
 
+// Role assigned to a load by ideal fusion pass 2.
+typedef enum Ideal_Fusion_Load_Role_enum {
+  IDEAL_FUSION_NOT_CANDIDATE,
+  IDEAL_FUSION_LOAD1,
+  IDEAL_FUSION_LOAD2,
+} Ideal_Fusion_Load_Role;
+
 /**************************************************************************************/
 
 typedef struct Wake_Up_Entry_struct {
@@ -261,6 +268,13 @@ struct Op_struct {
   uns16 dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];       // the reg id of allocated reg file entries
   uns16 prev_dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];  // the previous dst reg id with the same parent register id
   // }}}
+
+  // Ideal-fusion metadata. Pass 1 assigns sequence numbers for logging.
+  // Pass 2 uses the sequence number to identify precomputed LOAD1/LOAD2 pairs.
+  Counter ideal_fusion_micro_op_num;
+  Ideal_Fusion_Load_Role ideal_fusion_load_role;
+  Counter ideal_fusion_partner_micro_op_num;
+
   FT* parent_FT;
   FT* parent_FT_off_path;
 };

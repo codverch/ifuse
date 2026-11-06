@@ -42,6 +42,7 @@ extern "C" {
 #include "frontend/frontend.h"
 }
 #include "frontend/frontend_intf.h"
+#include "ideal-fusion/ideal_fusion.h"
 #include "isa/isa_macros.h"
 
 #include "decoupled_frontend.h"
@@ -201,6 +202,14 @@ FT_Event FT::build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::functio
     op->conf_off_path = conf_off_path;
     collect_op_stats(op);
     op->op_num = get_next_op_id_fn();
+
+    // Every fetched op starts outside ideal fusion. Pass 1 or pass 2 may assign
+    // a sequence number and classify on-path ops later.
+    op->ideal_fusion_micro_op_num = 0;
+    op->ideal_fusion_load_role = IDEAL_FUSION_NOT_CANDIDATE;
+    op->ideal_fusion_partner_micro_op_num = 0;
+    ideal_fusion_on_fetch_op(op);
+
     op->bp_pred_main.pred_npc = op->oracle_info.npc;
     op->bp_pred_main.pred = op->oracle_info.dir;  // for prebuilt, pred is same as dir
     add_op(op);

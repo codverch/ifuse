@@ -27,10 +27,12 @@ import os
 # Modify each temporary variable below to contain the default path for each item.
 ###################################################################################
 __pin_dir__        = "/misc/pool1/pin/pinplay-drdebug-3.5-pin-3.5-97503-gac534ca30-gcc-linux"
-__mcpat_bin__      = "/misc/pool1/mcpat/mcpat_v1.0/mcpat"
-__cacti_bin__      = "/misc/pool1/mcpat/cacti65/cacti"
 __scarab_bin_dir__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 __scarab_sim_dir__ = os.path.dirname(__scarab_bin_dir__)
+_staged_mcpat = os.path.join(__scarab_bin_dir__, "mcpat")
+_staged_cacti = os.path.join(__scarab_bin_dir__, "cacti")
+__mcpat_bin__ = _staged_mcpat if os.path.isfile(_staged_mcpat) else "/misc/pool1/mcpat/mcpat_v1.0/mcpat"
+__cacti_bin__ = _staged_cacti if os.path.isfile(_staged_cacti) else "/misc/pool1/mcpat/cacti65/cacti"
 
 ###################################################################################
 # Public Variables: Use the values below to get the path to each item in other
