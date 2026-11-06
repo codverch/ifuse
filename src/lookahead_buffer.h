@@ -35,6 +35,9 @@ FT* lookahead_buffer_pop_ft(uns proc_id);
 /* init lookahead buffer up to configured size */
 void init_lookahead_buffer(uns proc_id);
 
+/* Drop all prefetched FTs without refilling (used by I-Fuse recovery) */
+void lookahead_buffer_flush(uns proc_id);
+
 /* Returns whether lookahead buffer can currently provide an op */
 Flag lookahead_buffer_can_fetch_op(uns proc_id);
 
@@ -163,6 +166,8 @@ class LookaheadBuffer {
 
   /* Returns number of FTs in buffer */
   uint64_t count() { return ft_buffer_count; };
+
+  void flush();
 };
 
 /* Returns all FTs in the buffer matching given static FT info */

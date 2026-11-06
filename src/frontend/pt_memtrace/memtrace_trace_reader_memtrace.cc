@@ -903,7 +903,10 @@ void TraceReaderMemtrace::processDrIsaInst(InstInfo* _info, bool has_another_mem
     ctype_inst_map.erase(mt_ref_.instr.addr);
   }
   auto ctype_inst_iter = ctype_inst_map.find(mt_ref_.instr.addr);
-  if (mt_ref_.instr.encoding_is_new) {
+  // Match processInst(): encoding_is_new can be false on a PC's first Scarab
+  // visit when the reader reuses a cached encoding (e.g., after chunk
+  // boundaries in filtered traces).
+  if (mt_ref_.instr.encoding_is_new || ctype_inst_iter == ctype_inst_map.end()) {
     assert(predecoded != nullptr);
     ctype_pin_inst cinst = {};
 
@@ -914,7 +917,6 @@ void TraceReaderMemtrace::processDrIsaInst(InstInfo* _info, bool has_another_mem
                            std::make_tuple(cinst.num_ld + cinst.num_st, false, cinst.cf_type, false, cinst));
     ctype_inst_iter = ctype_inst_map.find(mt_ref_.instr.addr);
   } else {
-    assert(ctype_inst_iter != ctype_inst_map.end());
     std::get<MAP_XED>(ctype_inst_iter->second).encoding_is_new = mt_ref_.instr.encoding_is_new;
   }
 

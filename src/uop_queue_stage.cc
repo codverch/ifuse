@@ -26,6 +26,7 @@ extern "C" {
 #include "uop_cache.h"
 }
 #include "ft.h"
+#include "ifuse/ifuse_recovery.h"
 
 // Macros
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_UOP_QUEUE_STAGE, ##args)
@@ -180,7 +181,8 @@ void recover_uop_queue_stage(void) {
       if (op && FLUSH_OP(op)) {
         DEBUG(op->proc_id, "UopQ flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
         flushed = TRUE;
-        ASSERT(op->proc_id, op->off_path);
+        ASSERT(op->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                                ifuse_recovery_is_flushing());
         if (op->parent_FT)
           ft_free_op(op);
         sd->ops[op_idx] = NULL;

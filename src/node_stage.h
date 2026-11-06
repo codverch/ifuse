@@ -60,6 +60,16 @@ typedef struct Node_Stage_struct {
 
 extern Node_Stage* node;
 
+/* Why node_fill_rob() stopped allocating this cycle (for top-down
+ * attribution) */
+typedef enum Node_Dispatch_Block_enum {
+  NODE_DISPATCH_BLOCK_NONE,
+  NODE_DISPATCH_BLOCK_ROB,
+  NODE_DISPATCH_BLOCK_LQ,
+  NODE_DISPATCH_BLOCK_SQ,
+} Node_Dispatch_Block;
+extern Node_Dispatch_Block node_dispatch_block;
+
 /**************************************************************************************/
 // Prototypes
 

@@ -177,6 +177,7 @@ void decoupled_fe_on_main_prediction(uns proc_id, Op* op);
 // dispatcher then re-applies spec_update on alt's TAGE with alt's direction.
 // Skipped during warmup and for off-path predictions.
 void decoupled_fe_capture_main_pre_state(uns proc_id, Op* op);
+void decoupled_fe_handle_ifuse_misprediction_flush(uns proc_id, uns bp_id, Op* op);
 // FTQ API
 void decoupled_fe_set_ftq_num(uint64_t ftq_ft_num);
 uint64_t decoupled_fe_get_ftq_num();
@@ -339,6 +340,7 @@ struct Decoupled_FE {
   // fire this; alt _ON_PREDICTION semantics only cover main's on-path /
   // recovery predict_ft pass.
   void drive_alt_on_prediction(Op* trigger_op);
+  void handle_ifuse_misprediction_flush(Op* op);
 
   // FSM states for DFE
   enum DFE_STATE {
@@ -352,9 +354,11 @@ struct Decoupled_FE {
  protected:
   void set_conf_off_path() { conf_off_path = true; }
   void dfe_recover_op();
+  void reset_ftq_iterators();
   bool is_off_path_state() const { return state == SERVING_OFF_PATH; }
   void check_consecutivity_and_push_to_ftq();
   void redirect_to_off_path(FT_PredictResult result);
+  void continue_off_path_ft_after_redirect();
   inline uint64_t ftq_max_size() { return ftq_ft_num; }
   void set_off_path_op_num(uint64_t op_num) { current_off_path_op_num = op_num; }
   void set_on_path_op_num(uint64_t op_num) { this->op_num = op_num; }

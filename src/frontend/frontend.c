@@ -123,11 +123,24 @@ void frontend_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr) 
   frontend->redirect(proc_id, bp_id, inst_uid, fetch_addr);
 }
 
-void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
+void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
+                      Flag ifuse_recovery) {
   DEBUG(proc_id, "Recover after inst_uid %lld\n", inst_uid);
 
   /* Recover to correct path */
-  frontend->recover(proc_id, bp_id, inst_uid);
+  frontend->recover(proc_id, bp_id, inst_uid, fetch_addr, ifuse_recovery);
+}
+
+void frontend_seek_onpath(uns proc_id, Addr fetch_addr) {
+#ifdef ENABLE_PT_MEMTRACE
+  if (FRONTEND == FE_PT || FRONTEND == FE_MEMTRACE) {
+    extern void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr);
+    ext_trace_seek_onpath(proc_id, fetch_addr);
+    return;
+  }
+#endif
+  (void)proc_id;
+  (void)fetch_addr;
 }
 
 void frontend_retire(uns proc_id, uns64 inst_uid) {

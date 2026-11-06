@@ -51,6 +51,7 @@
 
 #include "decoupled_frontend.h"
 #include "ft.h"
+#include "ifuse/ifuse_recovery.h"
 #include "op_pool.h"
 #include "statistics.h"
 #include "thread.h" /* for td */
@@ -144,7 +145,8 @@ void recover_decode_stage() {
           DEBUG(dec->proc_id, "Decode flushing op_num:%llu off_path:%u\n", (unsigned long long)cur->ops[jj]->op_num,
                 cur->ops[jj]->off_path);
           flushed = TRUE;
-          ASSERT(cur->ops[jj]->proc_id, cur->ops[jj]->off_path);
+          ASSERT(cur->ops[jj]->proc_id, cur->ops[jj]->off_path || bp_recovery_info->ifuse_recovery ||
+                                             ifuse_recovery_is_flushing());
           if (cur->ops[jj]->parent_FT)
             ft_free_op(cur->ops[jj]);
           cur->ops[jj] = NULL;

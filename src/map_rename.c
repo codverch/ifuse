@@ -29,6 +29,11 @@
 
 #include "map_rename.h"
 
+#include "bp/bp.h"
+#include "ifuse/ifuse_recovery.h"
+#include "ifuse/ifuse_stats.h"
+#include "ifuse/ifuse_rename.h"
+
 #include "globals/assert.h"
 #include "globals/global_defs.h"
 #include "globals/global_types.h"
@@ -40,6 +45,8 @@
 #include "isa/isa.h"
 #include "isa/isa_macros.h"
 
+#include "exec_stage.h"
+#include "exec_ports.h"
 #include "map_stage.h"
 #include "node_stage.h"
 #include "op.h"
@@ -403,11 +410,18 @@ static inline void reg_file_write_dst(Op *op, int self_reg_table_type, int paren
     ASSERT(op->proc_id, op->prev_dst_reg_id[ii][self_reg_table_type] == REG_TABLE_REG_ID_INVALID);
     op->prev_dst_reg_id[ii][self_reg_table_type] = reg_table->parent_reg_table->entries[parent_reg_id].child_reg_id;
 
-    // allocate the dst register and write meta info
-    int self_reg_id = reg_table->ops->alloc(reg_table, op, parent_reg_id);
+    // An I-Fuse LD2 takes the register LD1 reserved for it, already
+    // referenced, instead of allocating one
+    int self_reg_id = REG_TABLE_REG_ID_INVALID;
+    if (self_reg_table_type == REG_TABLE_TYPE_PHYSICAL)
+      self_reg_id = ifuse_take_ld2_dest_reg(op, op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+    if (self_reg_id == REG_TABLE_REG_ID_INVALID) {
+      // allocate the dst register and write meta info
+      self_reg_id = reg_table->ops->alloc(reg_table, op, parent_reg_id);
 
-    // increase the reference number for register sharing
-    reg_table->entries[self_reg_id].num_refs++;
+      // increase the reference number for register sharing
+      reg_table->entries[self_reg_id].num_refs++;
+    }
 
     // update the parent table to ensure the latest assignment
     reg_table->parent_reg_table->entries[parent_reg_id].child_reg_id = self_reg_id;
@@ -456,7 +470,8 @@ static inline void reg_file_produce_dst(Op *op, int *reg_table_types, int reg_ta
 }
 
 static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int reg_table_num) {
-  ASSERT(op->proc_id, op->off_path);
+  ASSERT(op->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                          ifuse_recovery_is_flushing());
 
   for (uns ii = 0; ii < op->uop->num_dest_regs; ii++) {
     int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
@@ -476,13 +491,55 @@ static inline void reg_file_flush_mispredict(Op *op, int *reg_table_types, int r
       ASSERT(op->proc_id, entry != NULL);
 
       entry->num_refs--;
-      ASSERT(op->proc_id, entry->off_path || entry->num_refs > 0);
+      ASSERT(op->proc_id, entry->off_path || bp_recovery_info->ifuse_recovery ||
+                              ifuse_recovery_is_flushing() || entry->num_refs > 0);
       if (entry->num_refs > 0) {
         continue;
       }
 
       ASSERT(op->proc_id, entry->reg_state != REG_TABLE_ENTRY_STATE_FREE);
       reg_table->ops->free(reg_table, entry);
+    }
+  }
+}
+
+/*
+ * Branch recovery normally flushes off-path ops, whose source reads do not
+ * affect the on-path counters. I-Fuse instead flushes younger correct-path ops.
+ * Remove those source reads before freeing their destinations so a later
+ * commit does not wait for consumers that no longer exist.
+ */
+static inline void reg_file_undo_ifuse_src_metadata(Op *op, int *reg_table_types, int reg_table_num) {
+  if (op->off_path)
+    return;
+
+  ASSERT(op->proc_id, bp_recovery_info->ifuse_recovery);
+
+  for (uns ii = 0; ii < op->uop->num_src_regs; ++ii) {
+    int reg_type = reg_file_get_reg_type(op->src_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+    if (reg_type == REG_FILE_REG_TYPE_OTHER)
+      continue;
+
+    for (uns jj = 0; jj < reg_table_num; ++jj) {
+      int table_type = reg_table_types[jj];
+      int reg_id = op->src_reg_id[ii][table_type];
+      if (reg_id == REG_TABLE_REG_ID_INVALID)
+        continue;
+
+      struct reg_table *reg_table = map_data->reg_file[reg_type]->reg_table[table_type];
+      struct reg_table_entry *entry = &reg_table->entries[reg_id];
+
+      ASSERT(op->proc_id, entry->onpath_consumers_num > 0);
+      entry->onpath_consumers_num--;
+
+      if (op->exec_count > 0) {
+        ASSERT(op->proc_id, entry->onpath_consumed_count > 0);
+        entry->onpath_consumed_count--;
+      } else if (entry->atomic_pending_consumed !=
+                 REG_RENAMING_SCHEME_EARLY_RELEASE_PENDING_CONSUMED_MAX) {
+        ASSERT(op->proc_id, entry->atomic_pending_consumed > 0);
+        entry->atomic_pending_consumed--;
+      }
     }
   }
 }
@@ -554,6 +611,7 @@ static inline void reg_file_init_checkpoint() {
     map_data->reg_file[ii]->reg_checkpoint->entries = (struct reg_table_entry *)malloc(
         sizeof(struct reg_table_entry) * map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL]->size);
     map_data->reg_file[ii]->reg_checkpoint->is_valid = FALSE;
+    map_data->reg_file[ii]->reg_checkpoint->owner_op_num = 0;
   }
 }
 
@@ -562,7 +620,7 @@ static inline void reg_file_init_checkpoint() {
   oldest mispredicted branch is resolved
   Therefore, only maintain one checkpoint of that mispredicted branch for recovering SRT
 */
-static inline void reg_file_snapshot_srt() {
+static inline void reg_file_snapshot_srt(Op *op) {
   for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
     struct reg_table *srt = map_data->reg_file[ii]->reg_table[REG_TABLE_TYPE_ARCHITECTURAL];
     struct reg_checkpoint *checkpoint = map_data->reg_file[ii]->reg_checkpoint;
@@ -570,6 +628,7 @@ static inline void reg_file_snapshot_srt() {
 
     ASSERT(map_data->proc_id, !checkpoint->is_valid);
     checkpoint->is_valid = TRUE;
+    checkpoint->owner_op_num = op->op_num;
   }
 }
 
@@ -587,6 +646,7 @@ static inline void reg_file_rollback_srt() {
 
     ASSERT(map_data->proc_id, checkpoint->is_valid);
     checkpoint->is_valid = FALSE;
+    checkpoint->owner_op_num = 0;
   }
 }
 
@@ -1018,7 +1078,7 @@ void reg_renaming_scheme_realistic_rename(Op *op) {
 
   // checkpoint the speculative register table for recovering
   if (!op->off_path && op->uop->cf_type && op->bp_pred_info->recovery_point == RECOVER_AT_EXEC)
-    reg_file_snapshot_srt();
+    reg_file_snapshot_srt(op);
 }
 
 // do not check the reg file when issuing
@@ -1057,6 +1117,7 @@ void reg_renaming_scheme_realistic_recover(Op *op) {
   for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
        op_p = (Op **)list_prev_element(&td->seq_op_list)) {
     reg_file_flush_mispredict(*op_p, reg_table_types, sizeof(reg_table_types) / sizeof(reg_table_types[0]));
+    ifuse_recover_op(*op_p);
   }
 }
 
@@ -1134,7 +1195,7 @@ void reg_renaming_scheme_late_allocation_rename(Op *op) {
 
   // checkpoint the speculative register table for recovering
   if (!op->off_path && op->uop->cf_type && op->bp_pred_info->recovery_point == RECOVER_AT_EXEC)
-    reg_file_snapshot_srt();
+    reg_file_snapshot_srt(op);
 }
 
 /*
@@ -1207,6 +1268,7 @@ void reg_renaming_scheme_late_allocation_recover(Op *op) {
   for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list); op_p && (*op_p)->op_num > op->op_num;
        op_p = (Op **)list_prev_element(&td->seq_op_list)) {
     reg_file_flush_mispredict(*op_p, reg_table_types, sizeof(reg_table_types) / sizeof(reg_table_types[0]));
+    ifuse_recover_op(*op_p);
   }
 }
 
@@ -1863,6 +1925,10 @@ void reg_file_rename(Op *op) {
   // allocate physical registers
   reg_renaming_scheme_func_table[REG_RENAMING_SCHEME].rename(op);
 
+  ifuse_rename_op(op);
+  ifuse_observe_gp_reg_pressure(op->proc_id);
+  ifuse_observe_extra_reg_pressure(op->proc_id);
+
   reg_file_collect_rename_stat(op);
 }
 
@@ -1896,10 +1962,139 @@ void reg_file_consume(Op *op) {
   Procedure:
   --- write back the dst registers
 */
+/*
+ * Physical register file write-port usage
+ *
+ * Every physical register write needs a write port in the cycle the value is
+ * written back. reg_file_produce() is often called before that cycle: an ALU
+ * op is produced when it issues, with wake_cycle = issue + latency. Counting
+ * at the call would put the write in the wrong cycle, so we count it at
+ * op_get_wake_cycle(op) instead, in a ring of per-cycle counters, and
+ * reg_file_observe_cycle() reads out one slot per cycle. A fused LD2 is
+ * counted too: it writes its own register at LD1's wake cycle plus the LD2
+ * wake delay.
+ *
+ * The ring only has to reach as far ahead as the longest execute latency,
+ * since loads are produced when their data returns. A write further out than
+ * the ring is counted in PRF_WRITES_BEYOND_RING rather than silently dropped,
+ * so a nonzero value means the ring is too small.
+ */
+#define PRF_WRITE_RING_SIZE 1024
+static uns prf_write_ring[MAX_NUM_PROCS][REG_FILE_REG_TYPE_NUM][PRF_WRITE_RING_SIZE];
+
+/*
+ * Load-port writeback collisions
+ *
+ * A load writes its value through the result path of the load port it issued
+ * on, in the cycle it wakes its consumers. A fused LD2 does no access of its
+ * own: its value comes off LD1's access and is written through LD1's port at
+ * LD1's wake cycle plus the LD2 wake delay. lp_ring counts, per load port and
+ * cycle, how many values that port writes back; lp_ld2_ring counts the LD2s
+ * among them. Scarab does not limit these writes, so a count above one is a
+ * collision that the hardware would have to resolve with a latch, backpressure,
+ * or a delay. Example: LD1 on port 2 wakes in cycle 100, so its LD2 writes
+ * through port 2 in cycle 101; a load that issued on port 2 one cycle after LD1
+ * and hit also writes back in cycle 101, so port 2 has two writes in cycle 101.
+ */
+static uns *lp_ring[MAX_NUM_PROCS];      // [fu * PRF_WRITE_RING_SIZE + slot]
+static uns *lp_ld2_ring[MAX_NUM_PROCS];
+static Flag lp_is_load_port[MAX_NUM_PROCS][64];
+
+static void load_port_init(uns proc_id) {
+  if (lp_ring[proc_id])
+    return;
+  ASSERT(proc_id, NUM_FUS <= 64);
+  lp_ring[proc_id] = (uns *)calloc((size_t)NUM_FUS * PRF_WRITE_RING_SIZE, sizeof(uns));
+  lp_ld2_ring[proc_id] = (uns *)calloc((size_t)NUM_FUS * PRF_WRITE_RING_SIZE, sizeof(uns));
+  for (uns fu = 0; fu < NUM_FUS; fu++)
+    lp_is_load_port[proc_id][fu] = (exec->fus[fu].type & get_fu_type(OP_ILD, FALSE)) != 0;
+}
+
+static void load_port_count_write(Op *op, Counter write_cycle) {
+  if (op->uop->mem_type != MEM_LD || !op->uop->num_dest_regs)
+    return;
+  load_port_init(op->proc_id);
+  Flag fused_ld2 = op->ifuse_load_role == LOAD2 && op->ifuse_ld2_early_wake_cycle != MAX_CTR &&
+                   op->ifuse_ld2_early_wake_cycle == op_get_wake_cycle(op);
+  uns fu = fused_ld2 ? op->ifuse_ld2_wb_fu : op->fu_num;
+  if (fu >= NUM_FUS || !lp_is_load_port[op->proc_id][fu])
+    return;
+  if (write_cycle - cycle_count >= PRF_WRITE_RING_SIZE) {
+    STAT_EVENT(op->proc_id, LOAD_PORT_WB_BEYOND_RING);
+    return;
+  }
+  uns idx = fu * PRF_WRITE_RING_SIZE + write_cycle % PRF_WRITE_RING_SIZE;
+  lp_ring[op->proc_id][idx]++;
+  if (fused_ld2)
+    lp_ld2_ring[op->proc_id][idx]++;
+}
+
+static void load_port_observe_cycle(uns proc_id) {
+  if (!lp_ring[proc_id])
+    return;
+  for (uns fu = 0; fu < NUM_FUS; fu++) {
+    if (!lp_is_load_port[proc_id][fu])
+      continue;
+    uns idx = fu * PRF_WRITE_RING_SIZE + cycle_count % PRF_WRITE_RING_SIZE;
+    uns n = lp_ring[proc_id][idx], ld2 = lp_ld2_ring[proc_id][idx];
+    lp_ring[proc_id][idx] = 0;
+    lp_ld2_ring[proc_id][idx] = 0;
+    INC_STAT_EVENT(proc_id, LOAD_PORT_WB_LOADS, n);
+    INC_STAT_EVENT(proc_id, LOAD_PORT_WB_LD2, ld2);
+    if (n > 1) {
+      STAT_EVENT(proc_id, LOAD_PORT_WB_COLLISION_CYCLES);
+      INC_STAT_EVENT(proc_id, LOAD_PORT_WB_EXCESS, n - 1);
+      if (ld2) {
+        STAT_EVENT(proc_id, LOAD_PORT_WB_COLLISION_CYCLES_LD2);
+        INC_STAT_EVENT(proc_id, LOAD_PORT_WB_EXCESS_LD2, n - 1);
+        INC_STAT_EVENT(proc_id, LOAD_PORT_WB_LD2_COLLIDED, ld2);
+      }
+    }
+  }
+}
+
+static void reg_file_count_writes(Op *op) {
+  Counter write_cycle = MAX2(op_get_wake_cycle(op), cycle_count);
+  load_port_count_write(op, write_cycle);
+  if (write_cycle - cycle_count >= PRF_WRITE_RING_SIZE) {
+    STAT_EVENT(op->proc_id, PRF_WRITES_BEYOND_RING);
+    return;
+  }
+
+  for (uns ii = 0; ii < op->uop->num_dest_regs; ++ii) {
+    int reg_type = reg_file_get_reg_type(op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+    if (reg_type != REG_FILE_REG_TYPE_OTHER)
+      prf_write_ring[op->proc_id][reg_type][write_cycle % PRF_WRITE_RING_SIZE]++;
+  }
+}
+
+/*
+  Called by:
+  --- cmp_model.c -> once per core per cycle, after all pipeline stages
+  Procedure:
+  --- record how many write ports each register file used this cycle
+*/
+void reg_file_observe_cycle(uns proc_id) {
+  STAT_EVENT(proc_id, PRF_WRITE_OBSERVED_CYCLES);
+  load_port_observe_cycle(proc_id);
+  for (uns reg_type = 0; reg_type < REG_FILE_REG_TYPE_NUM; ++reg_type) {
+    uns *slot = &prf_write_ring[proc_id][reg_type][cycle_count % PRF_WRITE_RING_SIZE];
+    uns writes = *slot;
+    *slot = 0;
+
+    // GP and vector stats are laid out side by side, so reg_type picks the one.
+    INC_STAT_EVENT(proc_id, PRF_WRITES_GP + reg_type, writes);
+    INC_STAT_EVENT(proc_id, PRF_WRITE_PORTS_PER_CYCLE_GP + reg_type, writes);
+    STAT_EVENT(proc_id, (reg_type == REG_FILE_REG_TYPE_GENERAL_PURPOSE ? PRF_WRITE_PORTS_GP_0 : PRF_WRITE_PORTS_VEC_0) +
+                            MIN2(writes, 8));
+  }
+}
+
 void reg_file_produce(Op *op) {
   ASSERT(map_data->proc_id,
          REG_RENAMING_SCHEME >= REG_RENAMING_SCHEME_INFINITE && REG_RENAMING_SCHEME < REG_RENAMING_SCHEME_NUM);
   reg_renaming_scheme_func_table[REG_RENAMING_SCHEME].produce(op);
+  reg_file_count_writes(op);
 }
 
 /*
@@ -1912,6 +2107,80 @@ void reg_file_recover(Op *op) {
   ASSERT(map_data->proc_id,
          REG_RENAMING_SCHEME >= REG_RENAMING_SCHEME_INFINITE && REG_RENAMING_SCHEME < REG_RENAMING_SCHEME_NUM);
   reg_renaming_scheme_func_table[REG_RENAMING_SCHEME].recover(op);
+}
+
+/*
+  I-Fuse LD2 failures differ from branch mispredictions:
+  --- LD2 itself remains valid
+  --- younger ops are control-flow-correct but must replay
+  --- branch checkpoints must remain untouched
+
+  Walk younger destinations from youngest to oldest. Restoring each previous
+  destination mapping in reverse program order reconstructs the architectural
+  map as it stood immediately after LD2 renamed.
+*/
+void reg_file_recover_ifuse(Op *op) {
+  if (REG_RENAMING_SCHEME == REG_RENAMING_SCHEME_INFINITE)
+    return;
+
+  for (uns ii = 0; ii < REG_FILE_REG_TYPE_NUM; ++ii) {
+    struct reg_checkpoint *checkpoint =
+        map_data->reg_file[ii]->reg_checkpoint;
+    if (checkpoint->is_valid && checkpoint->owner_op_num > op->op_num) {
+      checkpoint->is_valid = FALSE;
+      checkpoint->owner_op_num = 0;
+    }
+  }
+
+  int physical_table_types[] = {REG_TABLE_TYPE_PHYSICAL};
+  int late_allocation_table_types[] = {REG_TABLE_TYPE_VIRTUAL, REG_TABLE_TYPE_PHYSICAL};
+  int *reg_table_types = physical_table_types;
+  int reg_table_num = sizeof(physical_table_types) / sizeof(physical_table_types[0]);
+
+  if (REG_RENAMING_SCHEME == REG_RENAMING_SCHEME_LATE_ALLOCATION) {
+    reg_table_types = late_allocation_table_types;
+    reg_table_num = sizeof(late_allocation_table_types) / sizeof(late_allocation_table_types[0]);
+  }
+
+  for (Op **op_p = (Op **)list_start_tail_traversal(&td->seq_op_list);
+       op_p && (*op_p)->op_num > op->op_num;
+       op_p = (Op **)list_prev_element(&td->seq_op_list)) {
+    Op *younger_op = *op_p;
+
+    /*
+     * FT ownership can keep the discarded Op object pool-valid briefly. Mark
+     * it explicitly so an older memory completion cannot wake its stale
+     * dependency-list entry after the issue queue has released that entry.
+     */
+    younger_op->ifuse_recovery_squashed = TRUE;
+
+    for (uns ii = 0; ii < younger_op->uop->num_dest_regs; ++ii) {
+      int reg_type =
+          reg_file_get_reg_type(younger_op->dst_reg_id[ii][REG_TABLE_TYPE_ARCHITECTURAL]);
+      if (reg_type == REG_FILE_REG_TYPE_OTHER)
+        continue;
+
+      for (int jj = 0; jj < reg_table_num; ++jj) {
+        int table_type = reg_table_types[jj];
+        int current_reg_id = younger_op->dst_reg_id[ii][table_type];
+        int previous_reg_id = younger_op->prev_dst_reg_id[ii][table_type];
+        int parent_reg_id = younger_op->dst_reg_id[ii][table_type - 1];
+
+        if (current_reg_id != REG_TABLE_REG_ID_INVALID &&
+            parent_reg_id != REG_TABLE_REG_ID_INVALID) {
+          map_data->reg_file[reg_type]
+              ->reg_table[table_type]
+              ->parent_reg_table
+              ->entries[parent_reg_id]
+              .child_reg_id = previous_reg_id;
+        }
+      }
+    }
+
+    reg_file_undo_ifuse_src_metadata(younger_op, reg_table_types, reg_table_num);
+    reg_file_flush_mispredict(younger_op, reg_table_types, reg_table_num);
+    ifuse_recover_op(younger_op);
+  }
 }
 
 /*

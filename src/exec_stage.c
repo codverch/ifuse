@@ -328,9 +328,11 @@ void update_exec_stage(Stage_Data* src_sd) {
     /* update op status and execution metadata; increment PMU counters */
     exec_stage_process_op(op);
 
-    /* branch recovery/resolution */
+    /* Branch recovery/resolution (I-Fuse: also allow a non-CF failed LD2 with
+     * recover_at_exec) */
     Flag is_replay = FALSE;  // TODO: check if this val is needed
-    if (op->uop->cf_type && !is_replay) {
+    if ((op->uop->cf_type && !is_replay) ||
+        (op->ifuse_flush_op && op->eom && !op->off_path)) {
       /*
        * branch recovery currently does not like to be done more than 1 time.
        * since we don't have any way to know if an op is going to be replayed,
@@ -561,7 +563,8 @@ static inline void exec_stage_bp_resolve(Op* op) {
   if (op->bp_pred_info->recovery_point == RECOVER_AT_EXEC) {
     DEBUG(exec->proc_id, "Exec schedules recovery for op_num:%llu at cycle:%llu\n", (unsigned long long)op->op_num,
           (unsigned long long)op_get_exec_cycle(op));
-    bp_stat_main_branch_resolve_latency(op, op_get_exec_cycle(op), TRUE);
+    if (!(op->ifuse_flush_op && op->eom))
+      bp_stat_main_branch_resolve_latency(op, op_get_exec_cycle(op), TRUE);
     bp_sched_recovery(bp_recovery_info, op, op_get_exec_cycle(op));
     if (!op->off_path)
       op->recovery_scheduled = TRUE;

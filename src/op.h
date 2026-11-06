@@ -105,6 +105,13 @@ typedef struct Op_Cycles_struct {
 DECLARE_ENUM(Op_State, OP_STATE_LIST, OS_);
 // clang-format on
 
+typedef enum Fusion_Candidate_Type {
+  NOT_FUSION_CANDIDATE,
+  LOAD1,
+  LOAD2,
+  PREDICTED_NOT_FUSED,
+} Fusion_Candidate_Type;
+
 /**************************************************************************************/
 
 typedef struct Wake_Up_Entry_struct {
@@ -261,6 +268,33 @@ struct Op_struct {
   uns16 dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];       // the reg id of allocated reg file entries
   uns16 prev_dst_reg_id[MAX_DESTS][REG_TABLE_TYPE_NUM];  // the previous dst reg id with the same parent register id
   // }}}
+
+  // {{{ I-Fuse information
+  Fusion_Candidate_Type ifuse_load_role;
+  Counter               ifuse_partner_op_num;
+  Addr                  ifuse_partner_ld1_pc;
+  uns16                 ifuse_ld2_physical_reg_id;
+  Flag                  ifuse_ld2_early_wake_signaled;
+  Flag                  ifuse_ld2_agu_completed;
+  Counter               ifuse_ld2_data_cycle;         // Cycle LD1's fused data arrived
+  Counter               ifuse_ld2_early_wake_cycle;   // Wake cycle set by the fused path
+  Flag                  ifuse_ld2_prediction_failed;
+  Flag                  ifuse_flush_op;
+  Flag                  ifuse_recovery_squashed;
+  /* Dynamic on-path load distance LD2 - LD1 at fetch (0 if not LD2) */
+  uint64_t              ifuse_pair_distance;
+  /* LD1: LD2's predicted address, whose bank the fused access also reads */
+  Addr                  ifuse_pred_ld2_va;
+  /* LD2: cycle LD1 accessed the L1-D, for the PMU's no-fusion estimate */
+  Counter               ifuse_ld1_dcache_cycle;
+  /* LD2: load port (FU) of LD1, whose result path writes LD2's value back */
+  uns                   ifuse_ld2_wb_fu;
+  /* Consumer: unique_num of a fused LD2 source (0 if none), and the latest
+   * wake cycle among its other sources. See ifuse_pmu.c. */
+  Counter               ifuse_pmu_ld2_unique_num;
+  Counter               ifuse_pmu_other_rdy_cycle;
+  // }}}
+
   FT* parent_FT;
   FT* parent_FT_off_path;
 };

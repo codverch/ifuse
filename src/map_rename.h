@@ -168,6 +168,7 @@ struct reg_table {
 struct reg_checkpoint {
   // metadata for validation of the special checkpoint mechanism in Scarab
   Flag is_valid;
+  Counter owner_op_num;
 
   // only map on-path op for recovery
   struct reg_table_entry *entries;
@@ -221,7 +222,9 @@ void reg_file_rename(Op *op);                 // alloc destination registers for
 Flag reg_file_issue(Op *op);                  // check the op before being issued into the FU
 void reg_file_consume(Op *op);                // consume the src registers
 void reg_file_produce(Op *op);                // write back the dst registers
+void reg_file_observe_cycle(uns proc_id);     // Sample PRF write-port usage for this cycle
 void reg_file_recover(Op *op);                // flush registers of misprediction operands
+void reg_file_recover_ifuse(Op *op);          // Flush younger operands after an I-Fuse LD2 failure
 void reg_file_precommit(Op *op);              // update the register metadata when an op is non-spec
 void reg_file_commit(Op *op);                 // release the previous register with same architectural register id
 

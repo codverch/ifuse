@@ -20,15 +20,23 @@
 
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-from scarab_globals import *
+import subprocess
 
-list_command = ["perl", scarab_paths.bin_dir + "/power/power_intf.pl", scarab_paths.mcpat_bin, scarab_paths.cacti_bin] + sys.argv[1:]
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+# Import only scarab_paths — avoid scarab_globals.__init__ star-import which
+# pulls in scarab_stats/pandas (not available in minimal sim images).
+from scarab_globals import scarab_paths
+
+list_command = [
+    "perl",
+    scarab_paths.bin_dir + "/power/power_intf.pl",
+    scarab_paths.mcpat_bin,
+    scarab_paths.cacti_bin,
+] + sys.argv[1:]
 
 print("Scarab power interface: executing command:")
 print(list_command)
-cmd = command.Command(' '.join(list_command))
-exit_code = cmd.run()
-print("Scarab power interface: command finished with exit code: " + str(exit_code));
+exit_code = subprocess.call(list_command)
+print("Scarab power interface: command finished with exit code: " + str(exit_code))
 
-exit(exit_code)
+sys.exit(exit_code)

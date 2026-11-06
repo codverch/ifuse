@@ -1,0 +1,315 @@
+/* FCT lookup and insertion (keyed by LD1 PC) */
+DEF_STAT(FCT_LOOKUP_HITS, COUNT, NO_RATIO)
+DEF_STAT(FCT_LOOKUP_MISSES, COUNT, NO_RATIO)
+DEF_STAT(FCT_LOOKUP_LOW_CONF, COUNT, NO_RATIO)
+DEF_STAT(FCT_RUNTIME_INSERTS, COUNT, NO_RATIO)
+DEF_STAT(FCT_RUNTIME_REPLACEMENTS, COUNT, NO_RATIO)
+DEF_STAT(FCT_RUNTIME_REINFORCEMENTS, COUNT, NO_RATIO)
+DEF_STAT(FCT_RUNTIME_CONFLICTS, COUNT, NO_RATIO)
+/*
+ * A new LD1 needed a row in a full set and evicted the tree-PLRU
+ * victim.
+ */
+DEF_STAT(FCT_EVICTIONS, COUNT, NO_RATIO)
+
+/*
+ * RLB (retired load history) capacity pressure. AGE_EVICTIONS counts
+ * entries removed because they aged past IFUSE_FUSION_DISTANCE.
+ * CAPACITY_EVICTIONS counts entries forced out early because the buffer
+ * was full, although they were still inside the distance window. A
+ * rising share of CAPACITY_EVICTIONS relative to AGE_EVICTIONS means
+ * ifuse_rlb_capacity is too small for the workload's load density.
+ */
+DEF_STAT(RLB_AGE_EVICTIONS, COUNT, NO_RATIO)
+DEF_STAT(RLB_CAPACITY_EVICTIONS, COUNT, NO_RATIO)
+// Matches where the partial tag agreed but the full line address did not,
+// so a load paired with an unrelated older load (simulator-only check)
+DEF_STAT(RLB_TAG_ALIAS_MATCHES, COUNT, NO_RATIO)
+
+/* Retire-stage runtime candidate discovery and bounded training table */
+DEF_STAT(IFUSE_TRAINING_PAIRS_DISCOVERED, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_TRAINING_STORE_INVALIDATIONS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_TRAINING_CROSS_LINE_LOADS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_LOOKUPS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_HITS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_MISSES, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_INSERTS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_EVICTIONS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_OBSERVATIONS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_PROMOTIONS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_PROMOTION_REJECTS, COUNT, NO_RATIO)
+DEF_STAT(TRAINING_TABLE_PEAK_LIVE, COUNT, NO_RATIO)
+
+/* APT lookup (keyed by LD2 PC, holding live LD1-to-LD2 predictions) */
+DEF_STAT(APT_LOOKUP_HITS, COUNT, NO_RATIO)
+DEF_STAT(APT_LOOKUP_MISSES, COUNT, NO_RATIO)
+/* Configured capacity (sets x ways), set once in apt_init() */
+DEF_STAT(APT_CONFIGURED_CAPACITY, COUNT, NO_RATIO)
+DEF_STAT(APT_REPLACED_OLDER_INSTANCE, COUNT, NO_RATIO)
+DEF_STAT(APT_INSERTS, COUNT, NO_RATIO)
+DEF_STAT(APT_EVICTIONS, COUNT, NO_RATIO)
+/*
+ * Legacy counter. The set-associative APT always finds a way through
+ * PLRU eviction.
+ */
+DEF_STAT(APT_INSERT_FAILURES, COUNT, NO_RATIO)
+DEF_STAT(APT_LIVE_LD2_PREDICTION_PEAK, COUNT, NO_RATIO)
+DEF_STAT(APT_LIVE_LD2_PREDICTION_OBSERVATIONS, COUNT, NO_RATIO)
+DEF_STAT(APT_LIVE_LD2_PREDICTION_TOTAL, COUNT, NO_RATIO)
+/* Average live APT entries = TOTAL / OBSERVATIONS */
+DEF_STAT(APT_LIVE_LD2_PREDICTION_AVG, RATIO, APT_LIVE_LD2_PREDICTION_OBSERVATIONS)
+/*
+ * In-flight fusion candidates (valid APT entries), sampled once per
+ * cycle. The average per cycle is TOTAL / OBSERVED_CYCLES.
+ */
+DEF_STAT(IFUSE_INFLIGHT_CANDIDATES_OBSERVED_CYCLES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_INFLIGHT_CANDIDATES_TOTAL, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_INFLIGHT_CANDIDATES_PER_CYCLE, RATIO, IFUSE_INFLIGHT_CANDIDATES_OBSERVED_CYCLES)
+
+/* In-flight fused pairs between map and early wake-up completion */
+DEF_STAT(IFUSE_INFLIGHT_FUSED_PAIRS_PEAK, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_INFLIGHT_FUSED_PAIRS_OBSERVATIONS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_INFLIGHT_FUSED_PAIRS_TOTAL, COUNT, NO_RATIO)
+
+/* ACI lookup (predicted vs. actual LD2 cache block) */
+DEF_STAT(ACI_LOOKUP_HITS, COUNT, NO_RATIO)
+DEF_STAT(ACI_LOOKUP_MISSES, COUNT, NO_RATIO)
+DEF_STAT(ACI_REPLAYED_INSERTS, COUNT, NO_RATIO)
+DEF_STAT(ACI_EVICTIONS, COUNT, NO_RATIO)
+/*
+ * Legacy counter. The set-associative ACI always finds a way through
+ * PLRU eviction.
+ */
+DEF_STAT(ACI_BACKING_ALLOC_FAILURES, COUNT, NO_RATIO)
+DEF_STAT(ACI_PREDICTION_INSERTS, COUNT, NO_RATIO)
+DEF_STAT(ACI_SAME_CACHEBLOCK_INSERTS, COUNT, NO_RATIO)
+DEF_STAT(ACI_PREDICTION_INVALIDATIONS, COUNT, NO_RATIO)
+DEF_STAT(ACI_STALE_PREDICTION_REMOVALS, COUNT, NO_RATIO)
+
+/*
+ * GP physical-register pressure (all rename traffic, including I-Fuse
+ * extras)
+ */
+DEF_STAT(IFUSE_GP_REG_OCCUPIED_PEAK, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_GP_REG_OCCUPIED_OBSERVATIONS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_GP_REG_OCCUPIED_TOTAL, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_GP_REG_UTIL_PCT_TOTAL, COUNT, NO_RATIO)
+
+/* Extra physical registers held for predicted or fused LD2 results */
+DEF_STAT(IFUSE_EXTRA_REG_IN_USE_PEAK, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_EXTRA_REG_IN_USE_OBSERVATIONS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_EXTRA_REG_IN_USE_TOTAL, COUNT, NO_RATIO)
+
+/* I-Fuse fusion prediction outcomes (fetch-time validation) */
+DEF_STAT(IFUSE_LOAD1_PREDICTIONS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_CORRECT_PREDICTIONS, COUNT, NO_RATIO)
+// LD2s flushed because a store between LD1 and LD2 wrote their bytes
+DEF_STAT(IFUSE_RAW_STORE_FLUSHES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_INCORRECT_PREDICTIONS, COUNT, NO_RATIO)
+
+/* I-Fuse fusion outcomes (retire and recovery) */
+DEF_STAT(IFUSE_FUSED_LOADS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_MISPREDICTED_LOADS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_MISPREDICTION_FLUSHES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_MISPREDICTED_CACHE_BLOCK_ADDR, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_MISPREDICTED_OFFSET_DELTA, COUNT, NO_RATIO)
+
+/*
+ * Observed load stalls
+ * ====================
+ * Compare these across baseline, RFP, and I-Fuse runs. The stall is
+ * done_cycle - exec_cycle, the number of cycles a load waited for its
+ * data. These stats do not invent an L1-hit "cycles saved" number.
+ * Fusion skips the demand access, so the simulator never learns
+ * whether it would hit or miss. Instead, compare totals across runs:
+ *
+ *   stalls_removed ≈ IFUSE_LD_STALL_CYCLES(baseline)
+ *                    - IFUSE_LD_STALL_CYCLES(ifuse)
+ *
+ * Coverage times the average stall on fused loads splits that
+ * difference into coverage and timeliness, when set next to RFP's
+ * stall totals of the same form.
+ */
+
+/* Every on-path load that retires */
+DEF_STAT(IFUSE_ALL_LOADS, COUNT, NO_RATIO)
+/* Retired loads that used the fused path (LD2 woken early) */
+DEF_STAT(IFUSE_NUM_FUSED_LOADS, COUNT, NO_RATIO)
+/* Retired loads that used the normal demand memory path */
+DEF_STAT(IFUSE_NUM_DEMAND_LOADS, COUNT, NO_RATIO)
+/* Fraction of retired loads that used fusion */
+DEF_STAT(IFUSE_LOAD_COVERAGE, RATIO, IFUSE_ALL_LOADS)
+
+/* Sum of stall cycles (done - exec) over all, fused, and demand loads */
+DEF_STAT(IFUSE_LD_STALL_CYCLES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_STALL_CYCLES_FUSED, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_STALL_CYCLES_DEMAND, COUNT, NO_RATIO)
+/* Average stall per load in each group */
+DEF_STAT(IFUSE_AVG_STALL_PER_LOAD, RATIO, IFUSE_ALL_LOADS)
+DEF_STAT(IFUSE_AVG_STALL_PER_FUSED, RATIO, IFUSE_NUM_FUSED_LOADS)
+DEF_STAT(IFUSE_AVG_STALL_PER_DEMAND, RATIO, IFUSE_NUM_DEMAND_LOADS)
+
+/* Fused LD2: LD1's data was already ready when LD2 finished AGU */
+DEF_STAT(IFUSE_FULL_MITIGATED, COUNT, NO_RATIO)
+/* Fused LD2: LD1's data arrived after LD2's AGU (observed leftover wait) */
+DEF_STAT(IFUSE_PARTIAL_MITIGATED, COUNT, NO_RATIO)
+/*
+ * Sum of (LD1_wake - AGU) when LD1 was late. It is 0 for full
+ * mitigation.
+ */
+DEF_STAT(IFUSE_REMAINING_WAIT_AFTER_AGU, COUNT, NO_RATIO)
+
+/*
+ * Prefetch timeliness: how early LD1's data was ready before LD2
+ * reached AGU. For each fused LD2,
+ * prefetch_lead = max(0, LD2_AGU_cycle - LD1_wake_cycle). It measures
+ * how far LD1 finishes ahead of when LD2 needs its fused result.
+ */
+DEF_STAT(IFUSE_PREFETCH_LEAD_OPPORTUNITIES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PREFETCH_LEAD_EVENTS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PREFETCH_LEAD_CYCLES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_AVG_PREFETCH_LEAD, RATIO, IFUSE_PREFETCH_LEAD_OPPORTUNITIES)
+/* Dynamic on-path load distance (LD2_load_num - LD1_load_num) at fusion */
+DEF_STAT(IFUSE_PAIR_DISTANCE_TOTAL, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_AVG_PAIR_DISTANCE, RATIO, IFUSE_PREFETCH_LEAD_OPPORTUNITIES)
+
+/* Other load latency at retire (on-path only) */
+/* Sum over loads of (exec_cycle - fetch_cycle) */
+DEF_STAT(IFUSE_LD_EXEC_MINUS_FETCH, COUNT, NO_RATIO)
+/* Sum over loads of (retire_cycle - fetch_cycle) */
+DEF_STAT(IFUSE_LD_RETIRE_MINUS_FETCH, COUNT, NO_RATIO)
+/* Alias of IFUSE_LD_STALL_CYCLES (done - exec) */
+DEF_STAT(IFUSE_LD_EXEC_TO_DONE, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_EXEC_MINUS_FETCH_FUSED, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_RETIRE_MINUS_FETCH_FUSED, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_EXEC_TO_DONE_FUSED, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_EXEC_MINUS_FETCH_DEMAND, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_RETIRE_MINUS_FETCH_DEMAND, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD_EXEC_TO_DONE_DEMAND, COUNT, NO_RATIO)
+
+/*
+ * Register consumers of a fused LD2, grouped by when they renamed
+ * relative to LD2's data (see ifuse_exec_pair_signal_ld2() and
+ * add_to_wake_up_lists()).
+ *
+ *   WAITING:             Renamed before LD2's data, and woken by it.
+ *   RENAMED_IN_DELAY:    Renamed after LD2 fired but before its delayed
+ *                        wake cycle, so the wake delay applies to them.
+ *   RENAMED_AFTER_READY: Renamed once LD2's data was visible, so they
+ *                        are unaffected.
+ *
+ * The _CRITICAL suffix means LD2 was the consumer's last source, so its
+ * wake cycle set the consumer's ready cycle. Consumers renamed after
+ * LD2 retired are not seen.
+ */
+DEF_STAT(IFUSE_LD2_CONSUMERS_WAITING, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD2_CONSUMERS_WAITING_CRITICAL, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD2_CONSUMERS_RENAMED_IN_DELAY, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD2_CONSUMERS_RENAMED_IN_DELAY_CRITICAL, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_LD2_CONSUMERS_RENAMED_AFTER_READY, COUNT, NO_RATIO)
+
+/* L1-D bank conflicts for LD2's word (ifuse_ld2_bank_conflict) */
+/*
+ * Fused accesses whose LD2 word sits in LD1's bank. One bank read
+ * serves both.
+ */
+DEF_STAT(IFUSE_LD2_BANK_SAME_AS_LD1, COUNT, NO_RATIO)
+/* Fused accesses that held LD2's bank read port for a cycle */
+DEF_STAT(IFUSE_LD2_BANK_RESERVED, COUNT, NO_RATIO)
+/* LD2's bank was already held by another fused access that cycle */
+DEF_STAT(IFUSE_LD2_BANK_ALREADY_HELD, COUNT, NO_RATIO)
+/* LD1 missed its own bank port, so it gave LD2's bank port back */
+DEF_STAT(IFUSE_LD2_BANK_RELEASED, COUNT, NO_RATIO)
+/*
+ * Conventional on-path loads delayed one cycle because a fused access
+ * held their bank. Each delayed cycle counts once.
+ */
+DEF_STAT(IFUSE_LD2_BANK_CONFLICT_DELAYS, COUNT, NO_RATIO)
+/*
+ * Of those, the delays whose fused access then released the port
+ * because LD1 missed its own bank. These loads waited although LD2's
+ * word was not read.
+ */
+DEF_STAT(IFUSE_LD2_BANK_CONFLICT_DELAYS_RELEASED, COUNT, NO_RATIO)
+
+/*
+ * PMU: what fusion did for each retired LD2 and its consumers
+ * ===========================================================
+ * These stats are counted at retirement, on-path only. The no-fusion
+ * time of an LD2's value is an estimate. LD2 issues as soon as its
+ * address sources are ready and takes 1 cycle for address generation.
+ * It then sees the L1-D hit latency, or LD1's own access latency if
+ * LD2 would have reached the cache first. It never gets data before
+ * LD1's line arrives, since both access the same line.
+ */
+
+/*
+ * Retired loads that were predicted as LD2 at fetch, split by how they
+ * ran
+ */
+DEF_STAT(IFUSE_PMU_LD2_RETIRED, COUNT, NO_RATIO)
+/* Served by LD1's access, with no issue and no L1-D access of its own */
+DEF_STAT(IFUSE_PMU_LD2_FUSED, COUNT, NO_RATIO)
+/* Lost its pair (e.g., to replay) and issued its own L1-D access */
+DEF_STAT(IFUSE_PMU_LD2_ISSUED, COUNT, NO_RATIO)
+/* Predicted LD2 address or size was wrong, so it issued as a normal load */
+DEF_STAT(IFUSE_PMU_LD2_MISPREDICTED, COUNT, NO_RATIO)
+
+/*
+ * Fused LD2s whose value was visible before the no-fusion estimate, and
+ * by how many cycles. AVG = EARLY_CYCLES / EARLY.
+ */
+DEF_STAT(IFUSE_PMU_LD2_EARLY, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_LD2_EARLY_CYCLES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_LD2_AVG_EARLY_CYCLES, RATIO, IFUSE_PMU_LD2_EARLY)
+/*
+ * Fused LD2s whose value was visible no earlier (e.g., because of the
+ * wake delay), and by how many cycles later.
+ */
+DEF_STAT(IFUSE_PMU_LD2_NOT_EARLY, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_LD2_LATE_CYCLES, COUNT, NO_RATIO)
+// Cycles saved by early LD2s and cycles lost by late ones, both averaged
+// over all fused LD2s. The average net saving per fused LD2 is
+// IFUSE_PMU_LD2_AVG_SAVED_CYCLES minus IFUSE_PMU_LD2_AVG_LOST_CYCLES.
+DEF_STAT(IFUSE_PMU_LD2_AVG_SAVED_CYCLES, RATIO, IFUSE_PMU_LD2_FUSED)
+DEF_STAT(IFUSE_PMU_LD2_AVG_LOST_CYCLES, RATIO, IFUSE_PMU_LD2_FUSED)
+
+/*
+ * Retired consumers of a fused LD2 (i.e., ops with a fused LD2 among
+ * their sources). A consumer gains only if all its sources are ready
+ * earlier.
+ *
+ *   EARLY:          Became ready earlier because of fusion.
+ *   OTHER_SOURCE:   Another source arrived no earlier than LD2's value
+ *                   would have, so fusion did not help (the two-value
+ *                   case).
+ *   LD2_NOT_EARLY:  LD2's value itself was not earlier.
+ *   BOUND_BY_ISSUE: Entered the scheduler after both times, so no gain.
+ *   UNKNOWN:        LD2's record was lost (more than 64K ops apart).
+ *
+ * The ready time is clamped to the cycle after the consumer entered the
+ * scheduler, since it cannot issue before then either way.
+ */
+DEF_STAT(IFUSE_PMU_CONSUMERS, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_AVG_EARLY_CYCLES, RATIO, IFUSE_PMU_CONSUMERS_EARLY)
+DEF_STAT(IFUSE_PMU_CONSUMERS_OTHER_SOURCE, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_LD2_NOT_EARLY, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_BOUND_BY_ISSUE, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_UNKNOWN, COUNT, NO_RATIO)
+/* EARLY consumers by instruction class, and their cycles gained */
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_LOAD, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_STORE, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_BRANCH, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_INT_ALU, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_INT_MULDIV, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_FP_VECTOR, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_OTHER, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_LOAD, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_STORE, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_BRANCH, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_INT_ALU, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_INT_MULDIV, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_FP_VECTOR, COUNT, NO_RATIO)
+DEF_STAT(IFUSE_PMU_CONSUMERS_EARLY_CYCLES_OTHER, COUNT, NO_RATIO)

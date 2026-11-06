@@ -269,6 +269,27 @@ FT* lookahead_buffer_pop_ft(uns proc_id) {
   return per_core_lookahead[proc_id]->pop_ft();
 }
 
+void LookaheadBuffer::flush() {
+  for (uint64_t buf_pos = 0; buf_pos < lookahead_buffer.size(); ++buf_pos) {
+    if (!lookahead_buffer[buf_pos])
+      continue;
+    delete lookahead_buffer[buf_pos];
+    update_search_indexes_on_remove(buf_pos);
+    lookahead_buffer[buf_pos] = nullptr;
+  }
+  rdptr_lb = 0;
+  wrptr_lb = 0;
+  ft_buffer_count = 0;
+}
+
+void lookahead_buffer_flush(uns proc_id) {
+  if (!LOOKAHEAD_BUF_SIZE)
+    return;
+  ASSERT(proc_id, proc_id < per_core_lookahead.size());
+  ASSERT(proc_id, per_core_lookahead[proc_id]);
+  per_core_lookahead[proc_id]->flush();
+}
+
 void init_lookahead_buffer(uns proc_id) {
   // LOOKAHEAD buffer should be disabled if we're using pin-exec-driven
   ASSERT(proc_id, !(LOOKAHEAD_BUF_SIZE && (FRONTEND == FE_PIN_EXEC_DRIVEN)));

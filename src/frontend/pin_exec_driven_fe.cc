@@ -171,7 +171,8 @@ void pin_exec_driven_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch
   DEBUG(proc_id, "Fetch Redirect end: %llx\n", fetch_addr);
 }
 
-void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
+void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid,
+                             Addr fetch_addr, Flag ifuse_recovery) {
   DEBUG(proc_id, "Fetch Recover: %llu\n", inst_uid);
   /* PIN will asynchronously recover, Scarab does not need to wait for PIN to
    * finish. Processes will synchronize when Scarab sends next command to PIN*/

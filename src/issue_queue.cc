@@ -47,8 +47,10 @@ extern "C" {
 
 #include "exec_ports.h"
 #include "exec_stage.h"
+#include "ifuse/ifuse_exec_pair.h"
 #include "map_rename.h"
 #include "node_stage.h"
+#include "backend_occupancy.h"
 }
 
 #include <algorithm>
@@ -880,7 +882,7 @@ void IssueQueue::issued(uns16 entry_id) {
 void IssueQueue::recover() {
   for (IssueQueueEntry& entry : entries) {
     Op* op = entry.op;
-    if (op == nullptr || !op->off_path) {
+    if (op == nullptr || (!op->off_path && !bp_recovery_info->ifuse_recovery)) {
       continue;
     }
 
@@ -1006,10 +1008,13 @@ void IssueQueues::dispatch() {
   Op* op = NULL;
   uns32 num_fill_rs = 0;
 
+  rs_dispatch_blocked = FALSE;
+
   for (op = node->next_op_into_rs; op; op = op->next_node) {
     ASSERT(proc_id, op->queue_id == MAX_UNS16 && op->queue_entry_id == MAX_UNS16);
     uns16 queue_id = find_emptiest_queue(op);
     if (queue_id == MAX_UNS16) {
+      rs_dispatch_blocked = TRUE;
       break;
     }
 

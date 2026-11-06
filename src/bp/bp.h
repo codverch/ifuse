@@ -62,6 +62,12 @@ typedef struct Bp_Recovery_Info_struct {
   Flag wpe_flag;     /* This CFI has a WPE associated with it */
   Counter wpe_cycle; /* The cycle in which the WPE occurred */
 
+  /*
+   * I-Fuse failures replay younger data-speculative operations without
+   * restoring branch-predictor history. LD2 itself is the recovery point.
+   */
+  Flag ifuse_recovery;
+
 } Bp_Recovery_Info;
 
 /**************************************************************************************/

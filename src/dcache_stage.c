@@ -51,6 +51,9 @@
 #include "prefetcher/stream_pref.h"
 
 #include "cmp_model.h"
+#include "ifuse/ifuse.param.h"
+#include "ifuse/ifuse_exec_pair.h"
+#include "ifuse/ifuse_recovery.h"
 #include "map.h"
 #include "model.h"
 #include "statistics.h"
@@ -110,6 +113,14 @@ static inline Flag dcache_miss_new_mem_req(Op* op, Addr line_addr, Mem_Req_Type 
 static inline void dcache_miss_extra_access(Op* op, Cache* cache, Addr line_addr, uns8 proc_id, uns8 cache_cycle);
 
 static inline Dcache_Data* dcache_fill_get_cacheline(Mem_Req* req);
+static void dcache_stage_ifuse_reserve_ld2_banks(void);
+
+/* I-Fuse: ld2_bank_holder[b] is the op_num of the fused LD1 holding bank b's
+ * read port for LD2's word this cycle, or 0 (ifuse_ld2_bank_conflict). */
+static Counter* ld2_bank_holder = NULL;
+/* Conventional loads delayed by each bank's reservation this cycle */
+static uns* ld2_bank_delays = NULL;
+static Flag dcache_stage_ifuse_ld2_bank(const Op* op, uns* bank);
 static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data);
 
 /**************************************************************************************/
@@ -170,7 +181,8 @@ void recover_dcache_stage() {
     }
     if (op && op->op_num > bp_recovery_info->recovery_op_num) {
       DEBUG(dc->proc_id, "Dcache flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
-      ASSERT(dc->proc_id, op->off_path);
+      ASSERT(dc->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                              ifuse_recovery_is_flushing());
       dc->sd.ops[ii] = NULL;
       dc->sd.op_count--;
     }
@@ -219,6 +231,15 @@ void update_dcache_stage(Stage_Data* src_sd) {
       continue;
     }
 
+    // A validated fused LD2 still uses the load AGU, but LD1 already
+    // supplied its data. Complete AGU bookkeeping without issuing a redundant
+    // D-cache access or memory request.
+    if (ifuse_exec_pair_bypass_ld2_memory_pipeline(op)) {
+      ifuse_exec_pair_complete_ld2_agu(op);
+      dcache_stage_remove_src_op(src_sd, ii);
+      continue;
+    }
+
     // squash non-memory and prefetch (when software prefetching is not enabled) ops
     if (!dcache_stage_check_mem_type(op)) {
       dcache_stage_remove_src_op(src_sd, ii);
@@ -233,6 +254,9 @@ void update_dcache_stage(Stage_Data* src_sd) {
     ASSERTM(dc->proc_id, cycle_count >= op_get_exec_cycle(op), "o:%s  %s\n", unsstr64(op->op_num),
             Op_State_str(op->state));
   }
+
+  /* Phase 1.5: fused accesses hold LD2's bank ahead of conventional ones */
+  dcache_stage_ifuse_reserve_ld2_banks();
 
   /* phase 2 - check the dcache port availability and do dcache access */
   int start_op_count = dc->sd.op_count;
@@ -281,11 +305,32 @@ void update_dcache_stage(Stage_Data* src_sd) {
     uns bank = BANK(op->oracle_info.va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR);
     DEBUG(dc->proc_id, "check_read and write port availiabilty mem_type:%s bank:%d \n",
           (op->uop->mem_type == MEM_ST) ? "ST" : "LD", bank);
+    uns ld2_bank;
+    Flag fused = dcache_stage_ifuse_ld2_bank(op, &ld2_bank);
     if (!PERFECT_DCACHE && ((op->uop->mem_type == MEM_ST && !get_write_port(&dc->ports[bank])) ||
                             (op->uop->mem_type != MEM_ST && !get_read_port(&dc->ports[bank])))) {
       op->state = OS_WAIT_DCACHE;
       STAT_EVENT(dc->proc_id, DCACHE_READ_PORT_UNAVAILABLE_ONPATH + op->off_path);
+      if (fused && ld2_bank_holder[ld2_bank] == op->op_num) {
+        // LD1 cannot access this cycle, so LD2's word is not read either.
+        ld2_bank_holder[ld2_bank] = 0;
+        dc->ports[ld2_bank].read_ports_in_use--;
+        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_RELEASED);
+        INC_STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_CONFLICT_DELAYS_RELEASED, ld2_bank_delays[ld2_bank]);
+      } else if (ld2_bank_holder && ld2_bank_holder[bank] && ld2_bank_holder[bank] != op->op_num &&
+                 op->uop->mem_type == MEM_LD && !op->off_path) {
+        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_CONFLICT_DELAYS);
+        ld2_bank_delays[bank]++;
+      }
       continue;
+    }
+    if (fused) {
+      if (ld2_bank == bank)
+        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_SAME_AS_LD1);
+      else if (ld2_bank_holder[ld2_bank] == op->op_num)
+        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_RESERVED);
+      else
+        STAT_EVENT(dc->proc_id, IFUSE_LD2_BANK_ALREADY_HELD);
     }
     // Record the op's first dcache access (dcache_cycle gates precommit). Every op
     // reaching here is making that first access: fresh from the scheduler, or an
@@ -306,6 +351,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
     Addr line_addr;
     Dcache_Data* line = (Dcache_Data*)cache_access(&dc->dcache, op->oracle_info.va, &line_addr, TRUE);
     dc->idle_cycle = MAX2(dc->idle_cycle, cycle_count + DCACHE_CYCLES);
+
+    // Count every demand access issued to the L1-D (hit or miss), by path
+    if (!op->off_path)
+      STAT_EVENT(op->proc_id, DCACHE_ACCESS_ONPATH);
+    else
+      STAT_EVENT(op->proc_id, DCACHE_ACCESS_OFFPATH);
 
     if (op->uop->mem_type == MEM_ST)
       STAT_EVENT(op->proc_id, POWER_DCACHE_WRITE_ACCESS);
@@ -960,4 +1011,54 @@ static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data
 
   ASSERT(dc->proc_id, data->read_count[0] || data->read_count[1] || data->write_count[0] || data->write_count[1] ||
                           req->off_path || data->prefetch || data->HW_prefetch);
+}
+
+/**************************************************************************************/
+/* I-Fuse: L1-D bank conflicts for LD2's word (ifuse_ld2_bank_conflict)
+ *
+ * A fused LD1 reads two words: its own and LD2's predicted word. Banks
+ * interleave every DCACHE_INTERLEAVE_FACTOR bytes, so the two words often sit
+ * in different banks. The fused access then holds LD2's bank read port too,
+ * ahead of conventional accesses: it reserves that port before ops arbitrate
+ * in program order. A conventional load that finds its bank's ports taken
+ * retries next cycle, so it waits exactly one cycle per conflict.
+ *
+ * Example: 8 banks, 4-byte interleave. LD1 reads offset 0 (bank 0) and LD2's
+ * predicted word is offset 16 (bank 4). In the cycle LD1 accesses, a
+ * conventional load to bank 4 finds the port held and retries next cycle.
+ *
+ * If LD1 itself misses its bank port, it gives LD2's port back. Older
+ * conventional loads that already failed on that port this cycle still wait;
+ * IFUSE_LD2_BANK_CONFLICT_DELAYS_RELEASED counts them.
+ * A word in LD1's own bank needs no second port, matching Scarab's one port
+ * per access regardless of width.
+ */
+
+static Flag dcache_stage_ifuse_ld2_bank(const Op* op, uns* bank) {
+  if (!IFUSE_LD2_BANK_CONFLICT || PERFECT_DCACHE || op->ifuse_load_role != LOAD1 || !op->ifuse_pred_ld2_va)
+    return FALSE;
+  *bank = BANK(op->ifuse_pred_ld2_va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR);
+  return TRUE;
+}
+
+static void dcache_stage_ifuse_reserve_ld2_banks(void) {
+  if (!IFUSE_LD2_BANK_CONFLICT || PERFECT_DCACHE)
+    return;
+  if (!ld2_bank_holder) {
+    ld2_bank_holder = (Counter*)calloc(DCACHE_BANKS, sizeof(Counter));
+    ld2_bank_delays = (uns*)calloc(DCACHE_BANKS, sizeof(uns));
+  }
+  memset(ld2_bank_holder, 0, DCACHE_BANKS * sizeof(Counter));
+  memset(ld2_bank_delays, 0, DCACHE_BANKS * sizeof(uns));
+
+  for (uns jj = 0; jj < dc->sd.max_op_count; jj++) {
+    Op* op = dc->sd.ops[jj];
+    uns ld2_bank;
+
+    if (!op || (op->replay && op_get_exec_cycle(op) == MAX_CTR) || !dcache_stage_ifuse_ld2_bank(op, &ld2_bank) ||
+        ld2_bank == BANK(op->oracle_info.va, DCACHE_BANKS, DCACHE_INTERLEAVE_FACTOR) || ld2_bank_holder[ld2_bank])
+      continue;
+    if (get_read_port(&dc->ports[ld2_bank]))
+      ld2_bank_holder[ld2_bank] = op->op_num;
+  }
 }

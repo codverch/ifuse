@@ -156,7 +156,8 @@ void trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr) {
               "FETCH_OFF_PATH_OPS\n");
 }
 
-void trace_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
+void trace_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
+                   Flag ifuse_recovery) {
   FATAL_ERROR(proc_id,
               "Trace frontend does not support wrong path. Turn off "
               "FETCH_OFF_PATH_OPS\n");

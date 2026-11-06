@@ -47,6 +47,8 @@
 #include "libs/hash_lib.h"
 
 #include "cmp_model.h"
+#include "ifuse/ifuse_exec_pair.h"
+#include "ifuse/ifuse_pmu.h"
 #include "map_rename.h"
 #include "model.h"
 #include "op_info.h"
@@ -189,6 +191,43 @@ void recover_map() {
   map_data->last_store_flag = FALSE;
   hash_table_scan(&map_data->oracle_mem_hash, recover_mem_map_entry, NULL);
   rebuild_offpath_map();
+}
+
+/**************************************************************************************/
+/* recover_map_ifuse: rebuild the dependency map after data-speculation
+ * replay */
+
+void recover_map_ifuse() {
+  ASSERT(map_data->proc_id, map_data->proc_id == td->proc_id);
+
+  /*
+   * Branch recovery normally preserves the on-path half of the map and drops
+   * only off-path writes. I-Fuse flushes younger correct-path ops, so rebuild
+   * both halves from the surviving in-flight sequence instead.
+   */
+  for (uns ii = 0; ii < NUM_REG_IDS * 2; ii++) {
+    map_data->reg_map[ii].op = &invalid_op;
+    map_data->reg_map[ii].op_num = 0;
+    map_data->reg_map[ii].unique_num = 0;
+  }
+  for (uns ii = 0; ii < NUM_REG_IDS; ii++)
+    map_data->map_flags[ii] = FALSE;
+
+  map_data->last_store[0].op = &invalid_op;
+  map_data->last_store[0].op_num = 0;
+  map_data->last_store[0].unique_num = 0;
+  map_data->last_store[1].op = &invalid_op;
+  map_data->last_store[1].op_num = 0;
+  map_data->last_store[1].unique_num = 0;
+  map_data->last_store_flag = FALSE;
+  hash_table_scan(&map_data->oracle_mem_hash, recover_mem_map_entry, NULL);
+
+  for (Op** op_p = (Op**)list_start_head_traversal(&td->seq_op_list);
+       op_p; op_p = (Op**)list_next_element(&td->seq_op_list)) {
+    update_map(*op_p);
+    if ((*op_p)->uop->mem_type == MEM_ST)
+      update_store_hash(*op_p);
+  }
 }
 
 /**************************************************************************************/
@@ -545,6 +584,13 @@ static inline void update_store_hash(Op* op) {
 void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
   Wake_Up_Entry* temp;
 
+  // A fused LD2 may have already woken its dependents when LD1 completed. Its
+  // later ordinary cache completion must not produce or wake a second time.
+  if (ifuse_exec_pair_skip_duplicate_wakeup(op, type)) {
+    ifuse_exec_pair_restore_early_wake(op);
+    return;
+  }
+
   _DEBUG(op->proc_id, DEBUG_REPLAY, "Waking up ops from src_op:%s unique:%s type:%s\n", unsstr64(op->op_num),
          unsstr64(op->unique_num), dep_type_names[type]);
   ASSERTM(op->proc_id, !op->wake_up_signaled[type] || op->replay, "op_num:%s op:%s off:%d\n", unsstr64(op->op_num),
@@ -552,6 +598,10 @@ void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
 
   // write back the register value for the dependent ops
   reg_file_produce(op);
+
+  // If this is a completed LD1, publish the fused LD2 result immediately when
+  // the matching LD2 has already reached map.
+  ifuse_exec_pair_handle_producer_wakeup(op, type, wake_action);
 
   ASSERT(op->proc_id, wake_action);
   for (temp = op->wake_up_head; temp; temp = temp->next) {
@@ -564,7 +614,13 @@ void wake_up_ops(Op* op, Dep_Type type, void (*wake_action)(Op*, Op*, uns)) {
       continue;
     /* if the stored unique num is not the same as the op pool entry, the op has
            been reclaimed and the wake up should be ignored */
-    if (dep_op->unique_num == dep_unique_num && dep_op->op_pool_valid) {
+    /*
+     * I-Fuse recovery may keep an Op object alive briefly through FT ownership
+     * after removing it from the backend. Do not wake such a squashed
+     * dependent from an older memory completion.
+     */
+    if (dep_op->unique_num == dep_unique_num && dep_op->op_pool_valid &&
+        !dep_op->ifuse_recovery_squashed) {
       ASSERTM(op->proc_id, op->proc_id == dep_op->proc_id, "dep_op proc_id: %u, valid: %u\n", dep_op->proc_id,
               dep_op->op_pool_valid);
       if (op_sources_test_not_rdy(dep_op, temp->rdy_bit)) {
@@ -653,6 +709,18 @@ void add_to_wake_up_lists(Op* op, void (*wake_action)(Op*, Op*, uns)) {
       if (src_op->wake_up_signaled[src_info->type]) {
         op_sources_clear_not_rdy(op, ii);
         wake_action(src_op, op, ii);
+        /* A consumer of a fused LD2 that renames after LD2 fired: is it still
+         * inside LD2's wake delay, and does LD2 set its ready cycle? */
+        if (src_info->type == REG_DATA_DEP && src_op->ifuse_load_role == LOAD2 &&
+            src_op->ifuse_ld2_early_wake_signaled && !op->off_path) {
+          if (cycle_count < op_get_wake_cycle(src_op)) {
+            STAT_EVENT(op->proc_id, IFUSE_LD2_CONSUMERS_RENAMED_IN_DELAY);
+            if (op_get_rdy_cycle(op) == op_get_wake_cycle(src_op))
+              STAT_EVENT(op->proc_id, IFUSE_LD2_CONSUMERS_RENAMED_IN_DELAY_CRITICAL);
+          } else {
+            STAT_EVENT(op->proc_id, IFUSE_LD2_CONSUMERS_RENAMED_AFTER_READY);
+          }
+        }
       }
 
       DEBUG(op->proc_id, "Added to wake up list  op_num:%s  src_op_num:%s type:%s\n", unsstr64(op->op_num),
@@ -695,6 +763,7 @@ void simple_wake(Op* src_op, Op* dep_op, uns rdy_bit) {
   ASSERT(src_op->proc_id, dep_op && dep_op != &invalid_op);
   UNUSED(rdy_bit);
   op_set_rdy_cycle(dep_op, MAX2(op_get_rdy_cycle(dep_op), op_get_wake_cycle(src_op)));
+  ifuse_pmu_note_wake(src_op, dep_op);
   if (op_sources_not_rdy_is_clear(dep_op))
     dep_op->state = op_get_rdy_cycle(dep_op) == cycle_count + 1 ? OS_READY : OS_WAIT_FWD;
 }

@@ -60,7 +60,8 @@ typedef struct Frontend_Intf_struct {
   void (*redirect)(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
 
   /* Recover the front end (restart the right path) */
-  void (*recover)(uns proc_id, uns bp_id, uns64 inst_uid);
+  void (*recover)(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
+                  Flag ifuse_recovery);
 
   /* Let the frontend know that this instruction is retired) */
   void (*retire)(uns proc_id, uns64 inst_uid);

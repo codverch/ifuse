@@ -74,6 +74,7 @@ extern Map_Data* map_data;
 Map_Data* set_map_data(Map_Data*);
 void init_map(uns8);
 void recover_map(void);
+void recover_map_ifuse(void);
 void rebuild_offpath_map(void);
 void reset_map(void);
 void map_op(Op*);

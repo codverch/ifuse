@@ -54,7 +54,11 @@ void frontend_fetch_op(uns proc_id, uns bp_id, struct Op_struct* op);
 void frontend_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
 
 /* Recover the front end (restart the right path) */
-void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid);
+void frontend_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
+                      Flag ifuse_recovery);
+
+/* Reposition the on-path trace stream (memtrace/pt only) */
+void frontend_seek_onpath(uns proc_id, Addr fetch_addr);
 
 /* Let the frontend know that this instruction is retired) */
 void frontend_retire(uns proc_id, uns64 inst_uid);

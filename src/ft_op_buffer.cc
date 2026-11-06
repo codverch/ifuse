@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "ifuse/ifuse_recovery.h"
+
 #include "globals/assert.h"
 #include "globals/utils.h"
 
@@ -94,7 +96,8 @@ void recover_ft_op_buffer(Icache_Stage* ic) {
       DEBUG(ic->proc_id, "Icache buffer flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
             op->off_path);
       flushed = TRUE;
-      ASSERT(ic->proc_id, op->off_path);
+      ASSERT(ic->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                          ifuse_recovery_is_flushing());
       ASSERT(ic->proc_id, op->parent_FT);
       ft_free_op(op);
     } else {

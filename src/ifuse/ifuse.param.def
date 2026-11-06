@@ -1,0 +1,72 @@
+/*
+ * I-Fuse parameters. The defaults are the paper's 1-cycle-delayed
+ * I-Fuse. See i-fuse/README.md.
+ */
+
+/* Training at retirement (retired-load buffer and training table) */
+
+// LD2 must be fewer than this many micro-ops after LD1, both in
+// training and for a live prediction.
+DEF_PARAM(ifuse_fusion_distance, IFUSE_FUSION_DISTANCE, uns, uns, 512, )
+// Retired-load buffer (RLB) entries. They need to cover the loads
+// within the fusion distance, not every micro-op.
+DEF_PARAM(ifuse_rlb_capacity, IFUSE_RLB_CAPACITY, uns, uns, 128, )
+// RLB ways. The set is picked by the low line-address bits, so 128 entries
+// in 8 ways is 16 sets. Capacity / ways must be a power of two.
+DEF_PARAM(ifuse_rlb_ways, IFUSE_RLB_WAYS, uns, uns, 8, )
+// Low line-address bits the RLB compares, set index included. The 4 index
+// bits come from the set; the other 28 are stored as the tag. 32 bits
+// matches the partial line tag in Helios (MICRO 2022).
+DEF_PARAM(ifuse_rlb_line_tag_bits, IFUSE_RLB_LINE_TAG_BITS, uns, uns, 32, )
+// Learn pairs at retirement. A value of 0 leaves the FCT empty, so
+// nothing fuses. This is the no-fusion baseline.
+DEF_PARAM(ifuse_runtime_training_enabled, IFUSE_RUNTIME_TRAINING_ENABLED, Flag, Flag, TRUE, )
+// Sightings of a pair before it moves from the training table to the FCT
+DEF_PARAM(ifuse_training_insert_threshold, IFUSE_TRAINING_INSERT_THRESHOLD, uns, uns, 32, )
+// Training table (TT) geometry: 32 sets x 4 ways
+DEF_PARAM(ifuse_training_table_sets, IFUSE_TRAINING_TABLE_SETS, uns, uns, 32, )
+DEF_PARAM(ifuse_training_table_ways, IFUSE_TRAINING_TABLE_WAYS, uns, uns, 4, )
+// Tag bits for LD1's PC in the TT. LD2's PC stays full width because
+// it moves to the FCT. A tag alias only shares a sighting counter. It
+// never promotes a wrong PC (see ifuse_training_table.c).
+DEF_PARAM(ifuse_training_table_pc_tag_bits, IFUSE_TRAINING_TABLE_PC_TAG_BITS, uns, uns, 32, )
+
+/* Fusion candidate table (FCT), read at fetch */
+
+// A row predicts while its confidence exceeds the threshold. A new
+// row starts at the insert confidence, which is also the cap. A
+// misprediction subtracts the penalty.
+DEF_PARAM(ifuse_fct_conf_threshold, IFUSE_FCT_CONF_THRESHOLD, uns, uns, 499, )
+DEF_PARAM(ifuse_fct_mispred_conf_penalty, IFUSE_FCT_MISPRED_CONF_PENALTY, uns, uns, 50, )
+DEF_PARAM(ifuse_fct_runtime_insert_conf, IFUSE_FCT_RUNTIME_INSERT_CONF, uns, uns, 500, )
+// Tag bits for LD1's PC, the lookup key. LD2's PC stays full width
+// (see ifuse_fct.h).
+DEF_PARAM(ifuse_fct_pc_tag_bits, IFUSE_FCT_PC_TAG_BITS, uns, uns, 32, )
+// The FCT has 2^hash_bits rows in sets of 4 or 8 ways with tree-PLRU.
+// The default is 512 rows in 128 sets.
+DEF_PARAM(ifuse_fct_hash_bits, IFUSE_FCT_HASH_BITS, uns, uns, 9, )
+DEF_PARAM(ifuse_fct_ways, IFUSE_FCT_WAYS, uns, uns, 4, )
+
+/* Active pair table (APT) and access check index (ACI): live predictions */
+
+// The APT is 32 sets x 8 ways. Hot PCs with many dynamic instances
+// thrash a set, so the APT has more ways rather than more sets.
+DEF_PARAM(ifuse_apt_sets, IFUSE_APT_SETS, uns, uns, 32, )
+DEF_PARAM(ifuse_apt_ways, IFUSE_APT_WAYS, uns, uns, 8, )
+DEF_PARAM(ifuse_aci_sets, IFUSE_ACI_SETS, uns, uns, 64, )
+DEF_PARAM(ifuse_aci_ways, IFUSE_ACI_WAYS, uns, uns, 4, )
+
+/* Execution */
+
+// Cycles after LD1's data arrives before LD2's consumers wake. A value
+// of 1 is the paper's 1-cycle-delayed I-Fuse. A value of 0 wakes them
+// with LD1's consumers.
+DEF_PARAM(ifuse_ld2_wake_delay, IFUSE_LD2_WAKE_DELAY, uns, uns, 1, )
+// Model L1-D bank conflicts for LD2's word. A fused access also holds
+// LD2's bank read port for its cycle
+// (dcache_stage_ifuse_reserve_ld2_banks()), so LD2's word goes through
+// the same bank check as a conventional load.
+DEF_PARAM(ifuse_ld2_bank_conflict, IFUSE_LD2_BANK_CONFLICT, Flag, Flag, TRUE, )
+// Simulator bookkeeping for in-flight pairs, not modeled hardware
+DEF_PARAM(ifuse_exec_pair_max_nodes, IFUSE_EXEC_PAIR_MAX_NODES, uns, uns, 524288, )
+DEF_PARAM(ifuse_exec_pair_num_buckets, IFUSE_EXEC_PAIR_NUM_BUCKETS, uns, uns, 4096, )

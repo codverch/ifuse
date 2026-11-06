@@ -1,6 +1,7 @@
 #include "trace_fe.h"
 
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -42,6 +43,13 @@ static ctype_pin_inst next_offpath_pi[MAX_NUM_PROCS][MAX_NUM_BPS];
 static bool off_path_mode[MAX_NUM_PROCS][MAX_NUM_BPS] = {};
 static uint64_t off_path_addr[MAX_NUM_PROCS][MAX_NUM_BPS] = {};
 static std::unordered_map<uint64_t, ctype_pin_inst> pc_to_inst[MAX_NUM_PROCS];
+/* Last on-path instance of each PC with its real oracle addresses. pc_to_inst
+ * may be poisoned (poison_replay_buffer_oracle_va), so I-Fuse's on-path
+ * repositioning after a flush reads this map instead. */
+static std::unordered_map<uint64_t, ctype_pin_inst> onpath_pc_to_inst[MAX_NUM_PROCS];
+/* After a pc_to_inst reposition, memtrace may still be ahead. Advance via the
+ * map until resynced. */
+static Flag onpath_advance_via_map[MAX_NUM_PROCS] = {};
 
 /* Per-core circular buffer state */
 struct TraceBufState {
@@ -226,6 +234,14 @@ void trace_buf_init() {
 }
 
 int trace_read(int proc_id, ctype_pin_inst *next_onpath_pi) {
+  /*
+   * The underlying PT/MEMTRACE readers are one-way streams. Recovery helpers
+   * may probe fetch again while the final exit op is draining, but once EOF is
+   * recorded there is no next instruction to decode.
+   */
+  if (trace_read_done[proc_id])
+    return 0;
+
   if (!TRACE_BUF_SIZE) {
     if (FRONTEND == FE_PT)
       return pt_trace_read(proc_id, next_onpath_pi);
@@ -246,6 +262,127 @@ int trace_read(int proc_id, ctype_pin_inst *next_onpath_pi) {
   return ret;
 }
 
+void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr);
+
+static Addr ext_trace_onpath_next_pc(const ctype_pin_inst& inst) {
+  if (inst.instruction_next_addr)
+    return inst.instruction_next_addr;
+  return inst.instruction_addr + inst.size;
+}
+
+static void ext_trace_pc_to_inst_update(uns proc_id, const ctype_pin_inst& inst) {
+  const uint64_t addr = inst.instruction_addr;
+  auto it = pc_to_inst[proc_id].find(addr);
+  if (it == pc_to_inst[proc_id].end()) {
+    pc_to_inst[proc_id].emplace(addr, inst);
+  } else if (inst.encoding_is_new) {
+    STAT_EVENT(proc_id, INST_MAP_UPDATE_ENCODING);
+    it->second = inst;
+  } else if (inst.inst_binary_lsb != it->second.inst_binary_lsb ||
+             inst.inst_binary_msb != it->second.inst_binary_msb) {
+    DEBUG(proc_id, "Previously seen PC references new instruction addr:%lx inst_size:%i lsb:%lx msb:%lx\n ", addr,
+          inst.size, inst.inst_binary_lsb, inst.inst_binary_msb);
+    // Handle jitted code
+    STAT_EVENT(proc_id, INST_MAP_UPDATE_JITTED);
+    it->second = inst;
+  } else if (inst.instruction_next_addr != it->second.instruction_next_addr) {
+    ASSERT(proc_id, inst.op_type == it->second.op_type);
+    if (inst.cf_type) {
+      ASSERT(proc_id, inst.cf_type == it->second.cf_type);
+    }
+    STAT_EVENT(proc_id, INST_MAP_UPDATE_NPC_INV + inst.op_type);
+    it->second = inst;
+  } else if (!ctype_pin_inst_same_mem_vaddr(inst, it->second)) {
+    ASSERT(proc_id, inst.op_type == it->second.op_type);
+    STAT_EVENT(proc_id, INST_MAP_UPDATE_MEM_INV + inst.op_type);
+    it->second = inst;
+  } else {
+    if (DEBUG_TRACE_READ && DEBUG_RANGE_COND(proc_id)) {
+      assert_ctype_pin_inst_same(proc_id, inst, it->second);
+    }
+  }
+  // I-Fuse repositions the on-path stream from this copy, which keeps the
+  // real oracle addresses.
+  onpath_pc_to_inst[proc_id][addr] = inst;
+  // Poison the oracle memory addresses of the replay-buffer entry for this
+  // PC; they are only ever read back to replay off-path instructions.
+  if (POISON_REPLAY_BUFFER_ORACLE_VA) {
+    ctype_pin_inst &replay_entry = pc_to_inst[proc_id][addr];
+    for (uns i = 0; i < MAX_LD_NUM; i++)
+      replay_entry.ld_vaddr[i] = REPLAY_BUFFER_POISON_VA;
+    for (uns i = 0; i < MAX_ST_NUM; i++)
+      replay_entry.st_vaddr[i] = REPLAY_BUFFER_POISON_VA;
+  }
+}
+
+static void ext_trace_drain_stream_until(uns proc_id, Addr fetch_addr) {
+  ctype_pin_inst tmp;
+  while (!trace_read_done[proc_id]) {
+    if (!trace_read(proc_id, &tmp))
+      return;
+    ext_trace_pc_to_inst_update(proc_id, tmp);
+    if (tmp.instruction_addr == fetch_addr)
+      return;
+    if (tmp.instruction_addr > fetch_addr) {
+      onpath_advance_via_map[proc_id] = TRUE;
+      return;
+    }
+  }
+}
+
+static void ext_trace_position_onpath(uns proc_id, Addr fetch_addr) {
+  auto find = onpath_pc_to_inst[proc_id].find(fetch_addr);
+  ASSERTM(proc_id, find != onpath_pc_to_inst[proc_id].end(),
+          "On-path position 0x%llx is not in the trace frontend map\n", (unsigned long long)fetch_addr);
+  next_onpath_pi[proc_id] = find->second;
+  onpath_advance_via_map[proc_id] = FALSE;
+  ext_trace_drain_stream_until(proc_id, fetch_addr);
+}
+
+static void ext_trace_advance_onpath_after_eom(uns proc_id, Op* op) {
+  const ctype_pin_inst completed = next_onpath_pi[proc_id];
+  const Addr next_addr = ext_trace_onpath_next_pc(completed);
+
+  if (onpath_advance_via_map[proc_id]) {
+    auto find = onpath_pc_to_inst[proc_id].find(next_addr);
+    if (find != onpath_pc_to_inst[proc_id].end()) {
+      next_onpath_pi[proc_id] = find->second;
+    } else {
+      onpath_advance_via_map[proc_id] = FALSE;
+      ext_trace_seek_onpath(proc_id, next_addr);
+      return;
+    }
+    while (!trace_read_done[proc_id]) {
+      ctype_pin_inst tmp;
+      if (!trace_read(proc_id, &tmp)) {
+        trace_read_done[proc_id] = TRUE;
+        reached_exit[proc_id] = TRUE;
+        op->exit = TRUE;
+        return;
+      }
+      ext_trace_pc_to_inst_update(proc_id, tmp);
+      if (tmp.instruction_addr == next_addr) {
+        next_onpath_pi[proc_id] = tmp;
+        onpath_advance_via_map[proc_id] = FALSE;
+        return;
+      }
+      if (tmp.instruction_addr > next_addr)
+        break;
+    }
+    onpath_advance_via_map[proc_id] = TRUE;
+    return;
+  }
+
+  int success = trace_read(proc_id, &next_onpath_pi[proc_id]);
+  if (!success) {
+    trace_read_done[proc_id] = TRUE;
+    reached_exit[proc_id] = TRUE;
+    op->exit = TRUE;
+  } else {
+    ext_trace_pc_to_inst_update(proc_id, next_onpath_pi[proc_id]);
+  }
+}
+
 void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
   // ext_trace_redirect should be called before fetching from the secondary fetch
   bool off_path_mode_ = off_path_mode[proc_id][bp_id];
@@ -264,58 +401,7 @@ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
 
   if (uop_generator_get_eom(proc_id)) {
     if (!off_path_mode_) {
-      int success = false;
-      success = trace_read(proc_id, &next_onpath_pi[proc_id]);
-      if (!success) {
-        trace_read_done[proc_id] = TRUE;
-        reached_exit[proc_id] = TRUE;
-        op->exit = TRUE;
-      } else {
-        uint64_t addr = next_onpath_pi[proc_id].instruction_addr;
-        auto it = pc_to_inst[proc_id].find(addr);
-        if (it == pc_to_inst[proc_id].end()) {
-          pc_to_inst[proc_id].emplace(addr, next_onpath_pi[proc_id]);
-        } else if (next_onpath_pi[proc_id].encoding_is_new) {
-          STAT_EVENT(proc_id, INST_MAP_UPDATE_ENCODING);
-          it->second = next_onpath_pi[proc_id];
-        } else if (next_onpath_pi[proc_id].inst_binary_lsb != it->second.inst_binary_lsb ||
-                   next_onpath_pi[proc_id].inst_binary_msb != it->second.inst_binary_msb) {
-          DEBUG(proc_id, "Previously seen PC references new instruction addr:%lx inst_size:%i lsb:%lx msb:%lx\n ", addr,
-                next_onpath_pi[proc_id].size, next_onpath_pi[proc_id].inst_binary_lsb,
-                next_onpath_pi[proc_id].inst_binary_msb);
-          // Handle jitted code
-          STAT_EVENT(proc_id, INST_MAP_UPDATE_JITTED);
-          it->second = next_onpath_pi[proc_id];
-        } else if (next_onpath_pi[proc_id].instruction_next_addr != it->second.instruction_next_addr) {
-          ASSERT(proc_id, next_onpath_pi[proc_id].op_type == it->second.op_type);
-          if (next_onpath_pi[proc_id].cf_type) {
-            ASSERT(proc_id, next_onpath_pi[proc_id].cf_type == it->second.cf_type);
-            // This can fail for java pt traces
-            // ASSERT(proc_id, next_onpath_pi[proc_id].cf_type == CF_CBR ||
-            //                 next_onpath_pi[proc_id].cf_type >= CF_IBR ||
-            //                 next_onpath_pi[proc_id].last_inst_from_trace);
-          }
-          STAT_EVENT(proc_id, INST_MAP_UPDATE_NPC_INV + next_onpath_pi[proc_id].op_type);
-          it->second = next_onpath_pi[proc_id];
-        } else if (!ctype_pin_inst_same_mem_vaddr(next_onpath_pi[proc_id], it->second)) {
-          ASSERT(proc_id, next_onpath_pi[proc_id].op_type == it->second.op_type);
-          STAT_EVENT(proc_id, INST_MAP_UPDATE_MEM_INV + next_onpath_pi[proc_id].op_type);
-          it->second = next_onpath_pi[proc_id];
-        } else {
-          if (DEBUG_TRACE_READ && DEBUG_RANGE_COND(proc_id)) {
-            assert_ctype_pin_inst_same(proc_id, next_onpath_pi[proc_id], it->second);
-          }
-        }
-        // Poison the oracle memory addresses of the replay-buffer entry for this
-        // PC; they are only ever read back to replay off-path instructions.
-        if (POISON_REPLAY_BUFFER_ORACLE_VA) {
-          ctype_pin_inst &replay_entry = pc_to_inst[proc_id][addr];
-          for (uns i = 0; i < MAX_LD_NUM; i++)
-            replay_entry.ld_vaddr[i] = REPLAY_BUFFER_POISON_VA;
-          for (uns i = 0; i < MAX_ST_NUM; i++)
-            replay_entry.st_vaddr[i] = REPLAY_BUFFER_POISON_VA;
-        }
-      }
+      ext_trace_advance_onpath_after_eom(proc_id, op);
     } else {
       off_path_generate_inst(proc_id, off_path_addr_, next_offpath_pi_);
     }
@@ -326,7 +412,7 @@ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
 
 Flag ext_trace_can_fetch_op(uns proc_id, uns bp_id) {
   if (!bp_id && !off_path_mode[proc_id])
-    return !(uop_generator_get_eom(proc_id) && trace_read_done[proc_id]);
+    return !trace_read_done[proc_id];
   else if (bp_id && !off_path_mode[proc_id][bp_id])
     return FALSE;
   else
@@ -345,11 +431,34 @@ void ext_trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr)
         next_offpath_pi[proc_id][bp_id].instruction_addr);
 }
 
-void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid) {
+void ext_trace_recover(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr,
+                       Flag ifuse_recovery) {
   Op dummy_op;
   dummy_op.bp_pred_l0 = {};
   dummy_op.bp_pred_main = {};
   dummy_op.btb_pred = {};
+
+  /*
+   * I-Fuse fetch-time redirect starts a separate speculative stream after the
+   * failed LD2. Fetching LD2 already advanced next_onpath_pi to its
+   * fall-through, so recovery only needs to discard that speculative stream.
+   * Seeking here would read the one-way memtrace stream again and permanently
+   * skip instructions each time an I-Fuse misprediction is recovered.
+   */
+  if (ifuse_recovery && fetch_addr && bp_id == 0) {
+    off_path_mode[proc_id][bp_id] = false;
+    off_path_addr[proc_id][bp_id] = 0;
+    next_offpath_pi[proc_id][bp_id] = {};
+    while (!uop_generator_get_eom(proc_id)) {
+      uop_generator_get_uop(proc_id, &dummy_op, &next_offpath_pi[proc_id][bp_id]);
+    }
+    ASSERTM(proc_id, next_onpath_pi[proc_id].instruction_addr == fetch_addr,
+            "IFuse recovery cursor 0x%llx does not match fall-through 0x%llx\n",
+            (unsigned long long)next_onpath_pi[proc_id].instruction_addr,
+            (unsigned long long)fetch_addr);
+    return;
+  }
+
   if (bp_id) {
     off_path_addr[proc_id][bp_id] = 0;
     next_offpath_pi[proc_id][bp_id] = {};
@@ -372,7 +481,38 @@ Addr ext_trace_next_fetch_addr(uns proc_id) {
   return next_onpath_pi[proc_id].instruction_addr;
 }
 
+void ext_trace_seek_onpath(uns proc_id, Addr fetch_addr) {
+  off_path_mode[proc_id][0] = false;
+  auto find = onpath_pc_to_inst[proc_id].find(fetch_addr);
+  if (find != onpath_pc_to_inst[proc_id].end()) {
+    ext_trace_position_onpath(proc_id, fetch_addr);
+    return;
+  }
+  onpath_advance_via_map[proc_id] = FALSE;
+  while (!trace_read_done[proc_id]) {
+    if (!trace_read(proc_id, &next_onpath_pi[proc_id]))
+      break;
+    ext_trace_pc_to_inst_update(proc_id, next_onpath_pi[proc_id]);
+    if (next_onpath_pi[proc_id].instruction_addr == fetch_addr)
+      return;
+  }
+  ASSERTM(proc_id, next_onpath_pi[proc_id].instruction_addr == fetch_addr,
+          "On-path seek to 0x%llx stopped at 0x%llx\n", (unsigned long long)fetch_addr,
+          (unsigned long long)next_onpath_pi[proc_id].instruction_addr);
+}
+
 void ext_trace_init() {
+  for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+    /*
+     * Scarab initializes the frontend once for warmup and again for measured
+     * simulation. EOF belongs to one frontend lifetime. Carrying it into the
+     * next phase would make trace_read() reject the first measured fetch.
+     */
+    trace_read_done[proc_id] = FALSE;
+    reached_exit[proc_id] = FALSE;
+    onpath_advance_via_map[proc_id] = FALSE;
+  }
+
   for (uns i = 0; i < MAX_NUM_PROCS; i++) {
     init_ctype_pin_inst(&next_onpath_pi[i]);
     for (uns j = 0; j < MAX_NUM_BPS; j++)

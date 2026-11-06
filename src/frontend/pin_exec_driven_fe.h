@@ -58,7 +58,8 @@ void pin_exec_driven_fetch_op(uns proc_id, uns bp_id, struct Op_struct* op);
 void pin_exec_driven_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr);
 
 /* Recover pin_exec_driven (restart the right path) */
-void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid);
+void pin_exec_driven_recover(uns proc_id, uns bp_id, uns64 inst_uid,
+                             Addr fetch_addr, Flag ifuse_recovery);
 
 /* Retire instruction at unique op id */
 void pin_exec_driven_retire(uns proc_id, uns64 inst_uid);

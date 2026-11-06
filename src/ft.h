@@ -118,7 +118,8 @@ struct FT {
 
   // Change return type to FT_BuildResult
   FT_Event build(std::function<bool(uns8, uns8)> can_fetch_op_fn, std::function<bool(uns8, uns8, Op*)> fetch_op_fn,
-                 bool off_path, bool conf_off_path, std::function<uint64_t()> get_next_op_id_fn);
+                 bool off_path, bool conf_off_path, std::function<uint64_t()> get_next_op_id_fn,
+                 Addr required_start_addr = 0);
   void remove_op_after_exec_recover();
 
   FT_PredictResult predict_ft();
@@ -141,7 +142,7 @@ struct FT {
 
   std::set<Addr> get_pcs();
 
-  FT_Ended_By get_end_reason() const;
+  FT_Ended_By get_end_reason(bool honor_ifuse_ft_end_suppress = true) const;
   void clear_recovery_info();
 
  private:

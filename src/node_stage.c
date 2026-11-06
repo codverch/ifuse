@@ -55,6 +55,11 @@
 #include "exec_ports.h"
 #include "ft.h"
 #include "icache_stage.h"
+#include "ifuse/ifuse_exec_pair.h"
+#include "ifuse/ifuse_recovery.h"
+#include "ifuse/ifuse_rename.h"
+#include "ifuse/ifuse_pmu.h"
+#include "ifuse/ifuse_train_retire.h"
 #include "issue_queue.h"
 #include "lsq.h"
 #include "map.h"
@@ -171,6 +176,9 @@ void recover_node_stage() {
   flush_scheduling_buffer();
   flush_rs();
   flush_window();
+  // Younger precommitted ops may have been removed. Rebuild this cursor from
+  // the surviving ROB entries on the next node-stage update.
+  node->node_precommit = NULL;
 
   // recover last_scheduled_opnum
   if (node->last_scheduled_opnum >= bp_recovery_info->recovery_op_num)
@@ -188,7 +196,8 @@ void flush_scheduling_buffer() {
       DEBUG(node->proc_id, "Node sched-buffer flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
             op->off_path);
       ASSERT(node->proc_id, node->proc_id == op->proc_id);
-      ASSERT(node->proc_id, op->off_path);
+      ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                                ifuse_recovery_is_flushing());
       ASSERTM(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num, "op_num:%s\n", unsstr64(op->op_num));
 
       node->sd.ops[ii] = NULL;
@@ -205,7 +214,8 @@ void flush_rs() {
     DEBUG(node->proc_id, "Node RS-input flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
           op->off_path);
     ASSERT(node->proc_id, node->proc_id == op->proc_id);
-    ASSERT(node->proc_id, op->off_path);
+    ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                              ifuse_recovery_is_flushing());
     ASSERTM(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num, "op_num:%s\n", unsstr64(op->op_num));
     node->next_op_into_rs = NULL;  // all later ops will also be flushed
   }
@@ -216,19 +226,24 @@ void flush_window() {
   Op** last;
   uns flush_ops = 0;
   uns keep_ops = 0;
-
   node->node_tail = NULL;
   for (op = node->node_head, last = &node->node_head; op; op = *last) {
     ASSERT(node->proc_id, node->proc_id == op->proc_id);
 
-    if (FLUSH_OP(op)) {
+    const Flag ifuse_flush_offpath =
+        bp_recovery_info->ifuse_recovery && op->off_path && !IS_FLUSHING_OP(op);
+
+    if (FLUSH_OP(op) || ifuse_flush_offpath) {
       DEBUG(node->proc_id, "Node window flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num,
             op->off_path);
-      ASSERT(node->proc_id, op->off_path);
+      ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                                ifuse_recovery_is_flushing());
       if (!op->macro_fused)
         flush_ops++;
-      ASSERT(node->proc_id, op->off_path);
-      ASSERT(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num);
+      ASSERT(node->proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                                ifuse_recovery_is_flushing());
+      if (!ifuse_flush_offpath)
+        ASSERT(node->proc_id, op->op_num > bp_recovery_info->recovery_op_num);
       op->in_node_list = FALSE;
       *last = op->next_node;
       if (op->parent_FT)
@@ -338,9 +353,13 @@ void update_node_stage(Stage_Data* src_sd) {
 /* node_fill_rob: This function takes ops from the map stage and allocates them into the node table.
  *    Note, this function does not place the Op in the RS, that is done later.*/
 
+Node_Dispatch_Block node_dispatch_block = NODE_DISPATCH_BLOCK_NONE;
+
 void node_fill_rob(Stage_Data* src_sd) {
   Flag on_path = FALSE;
   uns ii;
+
+  node_dispatch_block = NODE_DISPATCH_BLOCK_NONE;
 
   /* if nothing to process, return */
   if (src_sd->op_count == 0) {
@@ -355,6 +374,7 @@ void node_fill_rob(Stage_Data* src_sd) {
     if (is_node_table_full()) {
       collect_node_table_full_stats(node->node_head);
       rob_block_issue_reason = ROB_BLOCK_ISSUE_FULL;
+      node_dispatch_block = NODE_DISPATCH_BLOCK_ROB;
       return;
     }
     rob_block_issue_reason = ROB_BLOCK_ISSUE_NONE;
@@ -370,6 +390,7 @@ void node_fill_rob(Stage_Data* src_sd) {
               unsstr64(op->op_num), op->uop->mem_type == MEM_LD ? "LD" : "ST", src_sd->op_count, node->node_count);
         STAT_EVENT(op->proc_id, LSQ_FULL_TOTAL);
         STAT_EVENT(op->proc_id, LSQ_FULL_TOTAL + op->uop->mem_type);
+        node_dispatch_block = op->uop->mem_type == MEM_LD ? NODE_DISPATCH_BLOCK_LQ : NODE_DISPATCH_BLOCK_SQ;
         return;
       }
 
@@ -416,7 +437,11 @@ void node_fill_rob(Stage_Data* src_sd) {
 
     DEBUG(node->proc_id, "Issuing the op op_num:%s off_path:%d\n", unsstr64(op->op_num), op->off_path);
 
-    op->state = OS_IN_ROB;
+    // The I-Fuse execution-side pair may already have finalized (OS_DONE) a
+    // truly fused LD2 if LD1 completed before LD2 reached dispatch. Do not
+    // regress it back to an in-flight state.
+    if (op->state != OS_DONE)
+      op->state = OS_IN_ROB;
 
     /* always stop issuing after a synchronizing op */
     if (op->uop->bar_type & BAR_ISSUE)
@@ -544,13 +569,87 @@ void node_retire() {
     }
     if (op->uop->mem_type == MEM_LD) {
       STAT_EVENT(op->proc_id, LD_NO_DEPENDENTS + (op->wake_up_head ? 1 : 0));
+
+      // Accumulate on-path load latency (retire guarantees on-path here)
+      INC_STAT_EVENT(op->proc_id, LD_EXEC_MINUS_FETCH_LATENCY, op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+      INC_STAT_EVENT(op->proc_id, LD_RETIRE_MINUS_FETCH_LATENCY, cycle_count - op_get_fetch_cycle(op));
+
+      /* Observed load stalls: done - exec (compare totals across runs) */
+      if (op_get_fetch_cycle(op) != MAX_CTR && op_get_exec_cycle(op) != MAX_CTR &&
+          op_get_done_cycle(op) != MAX_CTR) {
+        Flag fused_path = op->ifuse_ld2_early_wake_signaled;
+        Counter stall_cycles = 0;
+
+        STAT_EVENT(op->proc_id, IFUSE_ALL_LOADS);
+        if (fused_path) {
+          STAT_EVENT(op->proc_id, IFUSE_NUM_FUSED_LOADS);
+          STAT_EVENT(op->proc_id, IFUSE_LOAD_COVERAGE);
+        } else {
+          STAT_EVENT(op->proc_id, IFUSE_NUM_DEMAND_LOADS);
+        }
+
+        if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+          INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_MINUS_FETCH,
+                         op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+        }
+        if (cycle_count >= op_get_fetch_cycle(op)) {
+          INC_STAT_EVENT(op->proc_id, IFUSE_LD_RETIRE_MINUS_FETCH,
+                         cycle_count - op_get_fetch_cycle(op));
+        }
+        if (op_get_done_cycle(op) >= op_get_exec_cycle(op)) {
+          stall_cycles = op_get_done_cycle(op) - op_get_exec_cycle(op);
+          INC_STAT_EVENT(op->proc_id, IFUSE_LD_STALL_CYCLES, stall_cycles);
+          INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_TO_DONE, stall_cycles);
+          INC_STAT_EVENT(op->proc_id, IFUSE_AVG_STALL_PER_LOAD, stall_cycles);
+        }
+
+        if (fused_path) {
+          if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_MINUS_FETCH_FUSED,
+                           op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+          }
+          if (cycle_count >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_RETIRE_MINUS_FETCH_FUSED,
+                           cycle_count - op_get_fetch_cycle(op));
+          }
+          if (stall_cycles) {
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_STALL_CYCLES_FUSED, stall_cycles);
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_TO_DONE_FUSED, stall_cycles);
+            INC_STAT_EVENT(op->proc_id, IFUSE_AVG_STALL_PER_FUSED, stall_cycles);
+          }
+        } else {
+          if (op_get_exec_cycle(op) >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_MINUS_FETCH_DEMAND,
+                           op_get_exec_cycle(op) - op_get_fetch_cycle(op));
+          }
+          if (cycle_count >= op_get_fetch_cycle(op)) {
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_RETIRE_MINUS_FETCH_DEMAND,
+                           cycle_count - op_get_fetch_cycle(op));
+          }
+          if (stall_cycles) {
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_STALL_CYCLES_DEMAND, stall_cycles);
+            INC_STAT_EVENT(op->proc_id, IFUSE_LD_EXEC_TO_DONE_DEMAND, stall_cycles);
+            INC_STAT_EVENT(op->proc_id, IFUSE_AVG_STALL_PER_DEMAND, stall_cycles);
+          }
+        }
+      }
     }
     STAT_EVENT(op->proc_id, RET_OP_EXEC_COUNT_0 + MIN2(32, op->exec_count));
 
     op_set_retire_cycle(op, cycle_count);
 
+    /* Learn only from committed operations and use all-uop program distance */
+    ifuse_train_retired_op(op);
+
+    // Count completed fusions, not speculative frontend classifications
+    if (op->ifuse_load_role == LOAD2) {
+      STAT_EVENT(op->proc_id, IFUSE_FUSED_LOADS);
+    }
+
     // free the previous register entries with same architectural destination
     reg_file_commit(op);
+    ifuse_retire_op(op);
+    ifuse_pmu_retire(op);
 
     node_precommit_retire(op);
 

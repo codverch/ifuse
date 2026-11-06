@@ -58,6 +58,9 @@
 #include "freq.h"
 #include "ft.h"
 #include "idq_stage.h"
+#include "ifuse/ifuse_apt.h"
+#include "ifuse/ifuse_recovery.h"
+#include "ifuse/ifuse_train_retire.h"
 #include "issue_queue.h"
 #include "lsq.h"
 #include "map_rename.h"
@@ -65,6 +68,7 @@
 #include "sim.h"
 #include "statistics.h"
 #include "topdown.h"
+#include "backend_occupancy.h"
 #include "uop_queue_stage.h"
 
 /**************************************************************************************/
@@ -268,6 +272,11 @@ void cmp_cores(void) {
       update_eip();
 
       cmp_measure_chip_util();
+
+      // Per-cycle occupancy samples, taken after every stage has run
+      reg_file_observe_cycle(proc_id);
+      backend_occupancy_observe_cycle(proc_id);
+      apt_observe_cycle(proc_id);
     }
   }
 }
@@ -369,21 +378,37 @@ void cmp_recover() {
   ASSERT(bp_recovery_info->proc_id, bp_recovery_info->recovery_cycle != MAX_CTR);
   ASSERT(bp_recovery_info->proc_id, bp_recovery_info->proc_id == g_bp_data->proc_id);
   ASSERT(bp_recovery_info->proc_id, bp_recovery_info->proc_id == map_data->proc_id);
+
+  /*
+   * Count an I-Fuse flush only when recovery actually fires. An older
+   * recovery can squash a failed LD2 before it reaches this point.
+   */
+  if (bp_recovery_info->ifuse_recovery)
+    STAT_EVENT(bp_recovery_info->proc_id, IFUSE_MISPREDICTION_FLUSHES);
+
   bp_recovery_info->recovery_cycle = MAX_CTR;
   bp_recovery_info->redirect_cycle = MAX_CTR;
+  ifuse_recovery_begin_flush(bp_recovery_info->recovery_op_num);
   cmp_set_all_stages(bp_recovery_info->proc_id);
   for (int bp_id = NUM_BPS - 1; bp_id >= 0; --bp_id) {
     cmp_set_all_data(bp_recovery_info->proc_id, bp_id);
     recover_decoupled_fe(bp_recovery_info->proc_id, bp_id, bp_recovery_info->recovery_cf_type,
                          &bp_recovery_info->recovery_info);
-    recover_fdip(bp_recovery_info->proc_id, bp_id);
+    if (!bp_recovery_info->ifuse_recovery)
+      recover_fdip(bp_recovery_info->proc_id, bp_id);
   }
 
-  topdown_bp_recovery(bp_recovery_info->proc_id, bp_recovery_info->recovery_op);
+  if (!bp_recovery_info->ifuse_recovery)
+    topdown_bp_recovery(bp_recovery_info->proc_id, bp_recovery_info->recovery_op);
 
-  reg_file_recover(bp_recovery_info->recovery_op);
+  if (bp_recovery_info->ifuse_recovery)
+    reg_file_recover_ifuse(bp_recovery_info->recovery_op);
+  else
+    reg_file_recover(bp_recovery_info->recovery_op);
   recover_thread(td, bp_recovery_info->recovery_fetch_addr, bp_recovery_info->recovery_op_num,
                  bp_recovery_info->recovery_inst_uid, FALSE);
+  if (bp_recovery_info->ifuse_recovery)
+    recover_map_ifuse();
 
   recover_icache_stage();
   recover_decode_stage();
@@ -396,6 +421,12 @@ void cmp_recover() {
   recover_dcache_stage();
   recover_memory();
   recover_node_stage();
+  if (bp_recovery_info->ifuse_recovery && bp_recovery_info->recovery_op) {
+    bp_recovery_info->recovery_op->off_path = FALSE;
+    bp_recovery_info->recovery_op->recovery_scheduled = FALSE;
+  }
+  ifuse_recovery_end_flush();
+  bp_recovery_info->ifuse_recovery = FALSE;
 }
 
 /**************************************************************************************/
@@ -449,8 +480,9 @@ void warmup_uncore(uns proc_id, Addr addr, Flag write) {
 }
 
 /**************************************************************************************/
-/* Warm up select microarchitectural structures: BP, icache, dcache,
- * and L1. No wrong path warmup. */
+/* Warm up select microarchitectural structures: BP, icache, dcache, L1, and
+ * the persistent retirement-side I-Fuse learning state. No wrong path
+ * warmup. */
 
 void cmp_warmup(Op* op) {
   uns proc_id = op->proc_id;
@@ -530,6 +562,21 @@ void cmp_warmup(Op* op) {
     }
     bp_retire_op(bp_data, op);
   }
+
+  /*
+   * Fast warmup bypasses the timing pipeline, so it never reaches the normal
+   * node-stage retirement hook. Feed its committed-operation stream to the
+   * same I-Fuse learner so the retired-load history, training table, and
+   * runtime-trained FCT reflect warmup execution. The reusable warmup Op
+   * skips FT's I-Fuse metadata initialization and classification path, so
+   * treat it as an unclassified committed operation.
+   *
+   * APT and ACI remain empty by design. They hold speculative, in-flight
+   * predictions, and fast warmup retires each operation immediately. Empty
+   * is therefore their architecturally correct state at the timing boundary.
+   */
+  op->ifuse_load_role = NOT_FUSION_CANDIDATE;
+  ifuse_train_retired_op(op);
 }
 
 static void cmp_measure_chip_util() {

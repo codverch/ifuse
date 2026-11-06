@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "ft.h"
+#include "ifuse/ifuse_recovery.h"
 
 extern "C" {
 #include "globals/assert.h"
@@ -144,7 +145,8 @@ void IDQ_Stage::recover() {
         DEBUG(proc_id, "IDQ queue flushing op_num:%llu off_path:%u\n", (unsigned long long)ops[i]->op_num,
               ops[i]->off_path);
         flushed = TRUE;
-        ASSERT(proc_id, ops[i]->off_path);
+        ASSERT(proc_id, ops[i]->off_path || bp_recovery_info->ifuse_recovery ||
+                            ifuse_recovery_is_flushing());
         ASSERT(proc_id, i == wrap_around(tail - 1));
         if (ops[i]->parent_FT)
           ft_free_op(ops[i]);
@@ -176,7 +178,8 @@ void IDQ_Stage::recover() {
     if (op && FLUSH_OP(op)) {
       DEBUG(proc_id, "IDQ output flushing op_num:%llu off_path:%u\n", (unsigned long long)op->op_num, op->off_path);
       flushed = TRUE;
-      ASSERT(proc_id, op->off_path);
+      ASSERT(proc_id, op->off_path || bp_recovery_info->ifuse_recovery ||
+                          ifuse_recovery_is_flushing());
       ASSERT(proc_id, i == idq_sd.op_count - 1);
       if (op->parent_FT)
         ft_free_op(op);

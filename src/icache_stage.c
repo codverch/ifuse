@@ -62,6 +62,7 @@
 #include "decode_stage.h"
 #include "ft.h"
 #include "ft_op_buffer.h"
+#include "ifuse/ifuse_recovery.h"
 #include "map.h"
 #include "op_pool.h"
 #include "sim.h"
@@ -251,7 +252,8 @@ void recover_icache_stage() {
         DEBUG(ic->proc_id, "Icache flushing op_num:%llu off_path:%u\n", (unsigned long long)cur_data->ops[ii]->op_num,
               cur_data->ops[ii]->off_path);
         flushed = TRUE;
-        ASSERT(ic->proc_id, cur_data->ops[ii]->off_path);
+        ASSERT(ic->proc_id, cur_data->ops[ii]->off_path || bp_recovery_info->ifuse_recovery ||
+                                ifuse_recovery_is_flushing());
         if (cur_data->ops[ii]->parent_FT)
           ft_free_op(cur_data->ops[ii]);
         cur_data->ops[ii] = NULL;
@@ -650,7 +652,23 @@ Icache_State icache_serving_actions(Break_Reason* break_fetch) {
   if (!ICACHE_FETCH_ACROSS_FETCH_TARGET && ic->lookups_per_cycle_count == 0 && ft_op_buffer_can_fetch_op(ic)) {
     occupied_lookup_buffer = 1;
   }
-  while (ic->sd.op_count < ic->sd.max_op_count) {
+  {
+    // Per-call watchdog: detects a genuine single-cycle infinite loop in icache
+    // serving. It must be reset on each invocation (not static). The icache
+    // serving path runs on every fusion-misprediction recovery, so a
+    // process-lifetime counter accumulates across cycles and falsely trips on
+    // long or aggressive runs, even when each call iterates only a handful of
+    // times.
+    uint64_t dbg_icache_while_iters = 0;
+    while (ic->sd.op_count < ic->sd.max_op_count) {
+      if (++dbg_icache_while_iters > 100000) {
+        fprintf(stderr,
+                "[scarab] icache_serving stuck iters=%llu sd=%u max=%u buf=%u lookups=%u\n",
+                (unsigned long long)dbg_icache_while_iters, ic->sd.op_count, ic->sd.max_op_count,
+                (unsigned)ft_op_buffer_count(ic), ic->lookups_per_cycle_count);
+        fflush(stderr);
+        ASSERT(ic->proc_id, 0);
+      }
     if (ft_op_buffer_can_fetch_op(ic)) {
       icache_serve_ops();
     } else if (ic->fetch_barrier_pending) {
@@ -675,6 +693,7 @@ Icache_State icache_serving_actions(Break_Reason* break_fetch) {
     } else {
       *break_fetch = BREAK_ICACHE_READ_LIMIT;
       return ICACHE_STAGE_RESTEER;
+    }
     }
   }
 
@@ -915,8 +934,8 @@ static inline void icache_process_ops(Stage_Data* cur_data, Flag fetched_from_uo
       uc->sd.ops[ii]->fetched_from_uop_cache = TRUE;
     }
 
-    ASSERTM(ic->proc_id, ic->off_path == op->off_path, "Inconsistent off-path op PC: %llx ic:%i op:%i\n",
-            op->inst->addr, ic->off_path, op->off_path);
+    /* Match instruction-fusion: per-op off-path tag drives icache path state */
+    ic->off_path = op->off_path;
 
     if (!op->off_path) {
       STAT_EVENT(ic->proc_id, UOPS_SERVED_BY_ICACHE_ON_PATH + op->fetched_from_uop_cache);

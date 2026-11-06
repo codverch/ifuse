@@ -47,8 +47,11 @@
 #include "bp/bp.h"
 
 #include "ft.h"
+#include "ifuse/ifuse_exec_pair.h"
+#include "ifuse/ifuse_recovery.h"
 #include "map.h"
 #include "map_rename.h"
+#include "node_stage.h"
 #include "model.h"
 #include "op_pool.h"
 #include "statistics.h"
@@ -147,7 +150,8 @@ void recover_map_stage() {
           DEBUG(map->proc_id, "Map flushing op_num:%llu off_path:%u\n", (unsigned long long)cur->ops[jj]->op_num,
                 cur->ops[jj]->off_path);
           flushed = TRUE;
-          ASSERT(map->proc_id, cur->ops[jj]->off_path);
+          ASSERT(map->proc_id, cur->ops[jj]->off_path || bp_recovery_info->ifuse_recovery ||
+                                   ifuse_recovery_is_flushing());
           if (cur->ops[jj]->parent_FT)
             ft_free_op(cur->ops[jj]);
           cur->ops[jj] = NULL;
@@ -190,6 +194,21 @@ void debug_map_stage() {
 /**************************************************************************************/
 /* map_cycle: */
 
+/* What the ROB looks like when rename stalls for lack of physical registers.
+ * Registers are freed only at retire, so a head that cannot retire is what
+ * keeps them allocated. */
+static void map_stage_collect_reg_file_stall_stat(void) {
+  INC_STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_ROB_OCCUPANCY, node->node_count);
+  Op* head = node->node_head;
+  if (!head || head->state == OS_DONE || OP_DONE(head))
+    return;
+  STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_HEAD_NOT_DONE);
+  if (head->engine_info.dcmiss)
+    STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_HEAD_DC_MISS);
+  if (head->engine_info.l1_miss)
+    STAT_EVENT(map->proc_id, MAP_STAGE_REG_FILE_STALL_HEAD_L1_MISS);
+}
+
 void update_map_stage(Stage_Data* src_sd) {
   /* stall if the renaming table is full */
   if (!reg_file_available(STAGE_MAX_OP_COUNT)) {
@@ -200,6 +219,7 @@ void update_map_stage(Stage_Data* src_sd) {
           map->last_sd->op_count, (src_sd->op_count && src_sd->ops[0]) ? unsstr64(src_sd->ops[0]->op_num) : "none",
           src_sd->op_count);
     STAT_EVENT(map->proc_id, MAP_STAGE_STALL_ITSELF);
+    map_stage_collect_reg_file_stall_stat();
     return;
   }
   map->reg_file_stall = FALSE;
@@ -264,6 +284,11 @@ static inline void stage_process_op(Op* op) {
 
   /* setting wake up lists */
   add_to_wake_up_lists(op, model->wake_hook);
+
+  // Register LD1 and LD2 after LD2's ordinary dependency links exist. The
+  // I-Fuse pair buffer can then model the fused early-result wake-up for
+  // either ordering: LD1 completion first, or LD2 map first.
+  ifuse_exec_pair_track_mapped_load(op, model->wake_hook);
 }
 
 static inline void map_stage_collect_stat(Flag stall, Flag starved) {

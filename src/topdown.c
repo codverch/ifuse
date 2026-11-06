@@ -44,6 +44,7 @@
 #include "map_stage.h"
 #include "node_stage.h"
 #include "op.h"
+#include "ifuse/ifuse_exec_pair.h"
 
 const static uns64 TOPDOWN_SCALE_FACTOR = 10000;
 
@@ -93,6 +94,69 @@ void topdown_bp_recovery(uns proc_id, Op* op) {
 }
 
 /*
+ * Backend-bound breakdown
+ *
+ * Every slot topdown_fetch_update() charges to TOPDOWN_BACKEND_STALL_SLOTS is
+ * also charged to exactly one structure and one ROB head state, so each
+ * breakdown sums to the backend-stall slots.
+ *
+ * Structure: what stopped allocation this cycle. Rename stalls on the physical
+ * register file; dispatch stops on a full ROB, LQ, or SQ. Anything else (a
+ * partially issued group with nothing full) is Other.
+ *
+ * Head state: why the window is not draining, from the oldest op.
+ */
+static void topdown_backend_attribute(uns proc_id, int backend_slots, Flag stalled_cycle) {
+  if (backend_slots <= 0)
+    return;
+
+  int full = TOPDOWN_BE_FULL_OTHER_SLOTS;
+  if (map->reg_file_stall)
+    full = TOPDOWN_BE_FULL_PRF_SLOTS;
+  else if (node_dispatch_block == NODE_DISPATCH_BLOCK_ROB)
+    full = TOPDOWN_BE_FULL_ROB_SLOTS;
+  else if (node_dispatch_block == NODE_DISPATCH_BLOCK_LQ)
+    full = TOPDOWN_BE_FULL_LQ_SLOTS;
+  else if (node_dispatch_block == NODE_DISPATCH_BLOCK_SQ)
+    full = TOPDOWN_BE_FULL_SQ_SLOTS;
+  INC_STAT_EVENT(proc_id, full, backend_slots);
+  if (stalled_cycle)
+    STAT_EVENT(proc_id, TOPDOWN_BE_FULL_PRF_CYCLES + (full - TOPDOWN_BE_FULL_PRF_SLOTS));
+
+  int head_state = TOPDOWN_BE_HEAD_EMPTY_SLOTS;
+  Op* head = node->node_head;
+  if (head) {
+    Mem_Type mem_type = head->uop->mem_type;
+    if (head->state == OS_DONE || OP_DONE(head))
+      head_state = TOPDOWN_BE_HEAD_DONE_SLOTS;
+    else if (head->engine_info.l1_miss)
+      head_state = TOPDOWN_BE_HEAD_LLC_MISS_SLOTS;
+    else if (head->engine_info.dcmiss)
+      head_state = TOPDOWN_BE_HEAD_L1D_MISS_SLOTS;
+    else if (ifuse_exec_pair_bypass_ld2_memory_pipeline(head))
+      head_state = TOPDOWN_BE_HEAD_FUSED_LD2_SLOTS;  // Waiting for LD1's data
+    else if (mem_type == MEM_ST)
+      head_state = TOPDOWN_BE_HEAD_STORE_SLOTS;
+    else if (mem_type != NOT_MEM && (head->state == OS_WAIT_DCACHE || head->state == OS_WAIT_MEM))
+      head_state = TOPDOWN_BE_HEAD_DCACHE_PORT_SLOTS;  // No L1-D port or MSHR this cycle
+    else if (mem_type != NOT_MEM && head->state != OS_IN_ROB && head->state != OS_READY &&
+             head->state != OS_LOW_PRIORITY)
+      head_state = TOPDOWN_BE_HEAD_L1D_HIT_SLOTS;  // Issued, hit, and still in flight
+    else if (head->state == OS_IN_ROB)
+      head_state = TOPDOWN_BE_HEAD_IQ_SLOTS;
+    else if (head->state == OS_READY || head->state == OS_LOW_PRIORITY)
+      head_state = TOPDOWN_BE_HEAD_PORT_SLOTS;
+    else if (head->state == OS_SCHEDULED || head->state == OS_TENTATIVE)
+      head_state = TOPDOWN_BE_HEAD_EXEC_SLOTS;
+    else
+      head_state = TOPDOWN_BE_HEAD_DEP_SLOTS;
+  }
+  INC_STAT_EVENT(proc_id, head_state, backend_slots);
+  if (stalled_cycle)
+    STAT_EVENT(proc_id, TOPDOWN_BE_HEAD_LLC_MISS_CYCLES + (head_state - TOPDOWN_BE_HEAD_LLC_MISS_SLOTS));
+}
+
+/*
  * Called once per cycle from the decoupled-frontend fetch point (execute_coupled_FSM), partitioning
  * TOPDOWN_WIDTH fetch slots. off_path is the icache stage's own wrong-path state, so bad speculation
  * covers the whole wrong-path fetch -- including BTB misses resolved at decode, which never reach the
@@ -115,6 +179,7 @@ void topdown_fetch_update(uns proc_id, Flag off_path, Flag backend_stall, int co
   } else if (backend_stall) {
     // Fetch stalled because the backend cannot accept ops (downstream full).
     INC_STAT_EVENT(proc_id, TOPDOWN_BACKEND_STALL_SLOTS, TOPDOWN_WIDTH);
+    topdown_backend_attribute(proc_id, TOPDOWN_WIDTH, TRUE);
     STAT_EVENT(proc_id, TOPDOWN_BACKEND_STALLS_CYCLES);
     if (lsq_get_in_flight_load_num() > 0) {
       STAT_EVENT(proc_id, TOPDOWN_MEM_LOAD_STALLS_CYCLES);
