@@ -426,6 +426,10 @@ void node_fill_rob(Stage_Data* src_sd) {
       STAT_EVENT(op->proc_id, IDEAL_FUSION_LOAD2_BYPASSED);
       op->state = OS_DONE;
       op->precommitted = TRUE;
+      // The nop never schedules or executes; stamp those counters at issue so
+      // the retirement check that every on-path op passed each stage holds.
+      op_set_sched_cycle(op, cycle_count);
+      op_set_exec_cycle(op, cycle_count);
       op_set_precommit_cycle(op, cycle_count);
       op_set_done_cycle(op, cycle_count);
       op_set_dcache_cycle(op, cycle_count);
