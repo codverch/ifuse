@@ -6,9 +6,11 @@ the baseline Scarab `89b5145`:
 
 | Config | Scarab branch | Commit | scarab-infra descriptor |
 |---|---|---|---|
-| nofuse, ifuse | `i-fuse-on-baseline` | 1532c62 | `json/isca2027/ifuse.json` |
-| ideal fusion (pass 1 log, pass 2 apply) | `ideal-fusion-on-baseline` | 240d66c | `json/isca2027/idealfusion_pass{1,2}.json` |
-| RFP | `rfp-on-baseline` | 6592d84 | `json/isca2027/rfp.json` |
+| nofuse, ifuse | `i-fuse-on-baseline` | 5fcac85 (binary `scarab_1532c62_0.opt`) | `json/isca2027/ifuse.json` |
+| ideal fusion (pass 1 log, pass 2 apply) | `ideal-fusion-on-baseline` | fa65392 (binary `scarab_240d66c_0.opt`) | `json/isca2027/idealfusion_pass{1,2}.json` |
+| RFP | `rfp-on-baseline` | 6edd37d (binary `scarab_6592d84_0.opt`) | `json/isca2027/rfp.json` |
+
+Binary names carry the pre-amend hash; the source tree is identical.
 
 `nofuse` (I-Fuse runtime training off) reproduces the baseline `Cumulative_Cycles`
 exactly on all 40 simpoints, so it is used as the baseline here.
